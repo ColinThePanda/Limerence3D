@@ -149,22 +149,6 @@ void set_mouse_mode(RGFW_window* win, MouseMode mode) {
     }
 }
 
-void update_mouse(RGFW_window* win, float* dx, float* dy) {
-    *dx = 0; *dy = 0;
-    if (mouseMode != MOUSE_DISABLED) return;
-
-    static int prev_x = -1, prev_y = -1;
-    int mx, my;
-    RGFW_window_getMouse(win, &mx, &my);
-
-    if (prev_x == -1) { prev_x = mx; prev_y = my; return; }
-
-    *dx = mx - prev_x;
-    *dy = my - prev_y;
-    prev_x = mx;
-    prev_y = my;
-}
-
 int main(void) {
     RGFW_window *win = RGFW_createWindow("Spinning Triangle", 100, 100, 800, 600, RGFW_windowCenter | RGFW_windowNoResize);
     set_mouse_mode(win, MOUSE_DISABLED);
@@ -180,7 +164,7 @@ int main(void) {
 
     HMM_Vec3 camera_pos = HMM_V3(0, 0, 2);
     float camera_pitch = 0.0f;
-    float camera_yaw = 0.0f;
+    float camera_yaw = 180.0f;
 
     HMM_Mat4 projection = HMM_Perspective_RH_NO(70.0f, (float)win->w / (float)win->h, 0.1f, 100.0f);
     HMM_Mat4 view = HMM_LookAt_RH(camera_pos, HMM_V3(0, 0, 0), HMM_V3(0, 1, 0));
@@ -188,8 +172,15 @@ int main(void) {
 
     while (RGFW_window_shouldClose(win) == RGFW_FALSE) {
         RGFW_event event;
+        float mouse_dx = 0, mouse_dy = 0;
         while (RGFW_window_checkEvent(win, &event)) {
             if (event.type == RGFW_quit) break;
+            if (event.type == RGFW_focusIn && mouseMode == MOUSE_DISABLED)
+                RGFW_window_holdMouse(win);
+            if (event.type == RGFW_mousePosChanged && mouseMode == MOUSE_DISABLED) {
+                camera_yaw   -= event.mouse.vecX * SENSITIVITY;
+                camera_pitch += event.mouse.vecY * SENSITIVITY;
+            }
         }
 
         if (RGFW_isKeyPressed(RGFW_escape))
@@ -201,13 +192,11 @@ int main(void) {
         float dt = (float)(current_time - last_frame) / NANOS_PER_SEC;
         last_frame = current_time;
 
-        olivec_fill(canvas, 0xFF181818);
+        olivec_fill(canvas, BACKGROUND_COLOR);
         for (size_t i = 0; i < win->w * win->h; ++i) zbuffer[i] = 1.0f;
 
-        float dx, dy;
-        update_mouse(win, &dx, &dy);
-        camera_yaw   -= dx * SENSITIVITY;
-        camera_pitch += dy * SENSITIVITY;
+        camera_yaw   -= mouse_dx * SENSITIVITY;
+        camera_pitch += mouse_dy * SENSITIVITY;
 
         if (camera_pitch > 90.0f) camera_pitch = 90.0f;
         if (camera_pitch < -90.0f) camera_pitch = -90.0f;

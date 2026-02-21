@@ -62,7 +62,9 @@ void link_libraries() {
 	cmd_append(&cmd, "-luser32");
 	#elif defined(__linux__)
 	cmd_append(&cmd, "-lX11");
+    cmd_append(&cmd, "-lXi");
 	cmd_append(&cmd, "-lXrandr");
+    cmd_append(&cmd, "-lm");
 	#elif defined(__APPLE__)
 	cmd_append(&cmd, "-framework", "Cocoa");
 	cmd_append(&cmd, "-framework", "CoreVideo");
@@ -105,7 +107,6 @@ int main(int argc, char **argv) {
 	if (!cmd_run(&cmd)) return 1;
 	
 	if (run) {
-		cmd.count = 0;
 		#ifdef _WIN32
 		cmd_append(&cmd, "main.exe");
 		#else
