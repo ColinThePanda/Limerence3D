@@ -229,6 +229,10 @@ int main(void) {
         HMM_Mat4 model = HMM_Rotate_RH(angle, HMM_V3(0, 1, 0));
         draw_model(canvas, zbuffer, model, view, projection, HMM_V3(0, 0, 1));
 
+        char buffer[256];
+        sprintf(buffer, "fps: %d", (int)(1/dt));
+        olivec_text(canvas, buffer, 0, 0, olivec_default_font, 4, 0xFFFFFFFF);
+
         angle += 90.0f * dt;
         if (angle >= 360.0f) angle -= 360.0f;
 

@@ -92,11 +92,14 @@ int main(int argc, char **argv) {
 	
 	append_basic();
 	cmd_append(&cmd, "-Wno-missing-braces");
-	cmd_append(&cmd, "-ggdb");
 	
 	if (release) {
 		cmd_append(&cmd, "-O3");
+		cmd_append(&cmd, "-march=native");
+		cmd_append(&cmd, "-ffast-math");
+		cmd_append(&cmd, "-flto");
 	} else {
+		cmd_append(&cmd, "-ggdb");
 		cmd_append(&cmd, "-O0");
 	}
 	
