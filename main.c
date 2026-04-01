@@ -2,19 +2,26 @@
 #include <stdlib.h>
 #define RGFW_IMPLEMENTATION
 #define RGFW_DEBUG
-#include "RGFW.h"
+#include "third_party/RGFW.h"
 #define OLIVEC_IMPLEMENTATION
-#include "olive.c"
+#include "third_party/olive.c"
 #include <math.h>
+
+#ifdef ERROR
+#undef ERROR
+#endif
 
 #define NOB_IMPLEMENTATION
 #define NOB_STRIP_PREFIX
-#include "nob.h"
+#include "third_party/nob.h"
+
+#include "assets.h"
 
 #define HANDMADE_MATH_USE_DEGREES
-#include "HandmadeMath.h"
+#include "third_party/HandmadeMath.h"
 
-#include "assets/utahTeapot.c"
+#include "assets/generated/assets_model_utah_teapot.asset.c"
+#include "assets/generated/assets_font_iosevka_regular.asset.c"
 
 #define SENSITIVITY 0.1f
 #define MOVEMENT_SPEED 3.0f
@@ -23,14 +30,58 @@
 #define NEAR_PLANE 0.1f
 #define FAR_PLANE 5.0f
 
-typedef enum {
-    FACE_V1, FACE_V2, FACE_V3,
-    FACE_VT1, FACE_VT2, FACE_VT3,
-    FACE_VN1, FACE_VN2, FACE_VN3,
-} Face_Index;
-
-static inline HMM_Vec3 vec3_from_array(float arr[3]) {
+static inline HMM_Vec3 vec3_from_array(const float arr[3]) {
     return HMM_V3(arr[0], arr[1], arr[2]);
+}
+
+static void write_text(Olivec_Canvas canvas, const Assets_Font *font, const char *text, int x, int y, int scale, uint32_t color) {
+    if (font == NULL || text == NULL || scale <= 0) return;
+
+    const float line_height = (font->ascent - font->descent + font->line_gap) * scale;
+    float pen_x = (float)x;
+    float baseline_y = (float)y + font->ascent * scale;
+
+    for (const unsigned char *cursor = (const unsigned char *)text; *cursor != '\0'; ++cursor) {
+        if (*cursor == '\n') {
+            pen_x = (float)x;
+            baseline_y += line_height;
+            continue;
+        }
+
+        int glyph_index = (int)(*cursor) - font->first_codepoint;
+        if (glyph_index < 0 || glyph_index >= font->glyph_count) continue;
+
+        const Assets_Glyph *glyph = &font->glyphs[glyph_index];
+        const int glyph_x = (int)(pen_x + glyph->xoff * scale);
+        const int glyph_y = (int)(baseline_y + glyph->yoff * scale);
+        const int glyph_width = glyph->x1 - glyph->x0;
+        const int glyph_height = glyph->y1 - glyph->y0;
+
+        for (int src_y = 0; src_y < glyph_height; ++src_y) {
+            for (int src_x = 0; src_x < glyph_width; ++src_x) {
+                int atlas_x = glyph->x0 + src_x;
+                int atlas_y = glyph->y0 + src_y;
+                unsigned char glyph_alpha = font->atlas_alpha[atlas_y * font->atlas_stride + atlas_x];
+                if (glyph_alpha == 0) continue;
+
+                uint32_t blended_color = (color & 0x00FFFFFF) |
+                    ((((color >> 24) & 0xFF) * glyph_alpha / 255U) << 24);
+
+                for (int dy = 0; dy < scale; ++dy) {
+                    int dst_y = glyph_y + src_y * scale + dy;
+                    if (dst_y < 0 || dst_y >= (int)canvas.height) continue;
+
+                    for (int dx = 0; dx < scale; ++dx) {
+                        int dst_x = glyph_x + src_x * scale + dx;
+                        if (dst_x < 0 || dst_x >= (int)canvas.width) continue;
+                        olivec_blend_color(&OLIVEC_PIXEL(canvas, dst_x, dst_y), blended_color);
+                    }
+                }
+            }
+        }
+
+        pen_x += glyph->xadvance * scale;
+    }
 }
 
 void draw_triangle(
@@ -40,6 +91,10 @@ void draw_triangle(
     HMM_Vec3 vn1, HMM_Vec3 vn2, HMM_Vec3 vn3,
     int width, int height
 ) {
+    (void)model;
+    (void)vn1;
+    (void)vn2;
+    (void)vn3;
     // Backface culling
     HMM_Vec3 edge1 = HMM_SubV3(v2_view, v1_view);
     HMM_Vec3 edge2 = HMM_SubV3(v3_view, v1_view);
@@ -87,17 +142,19 @@ void draw_triangle(
 }
 
 void draw_model(Olivec_Canvas canvas, float *zbuffer, HMM_Mat4 model, HMM_Mat4 view, HMM_Mat4 projection, HMM_Vec3 camera) {
+    (void)camera;
     HMM_Mat4 mv  = HMM_MulM4(view, model);
-    HMM_Mat4 mvp = HMM_MulM4(projection, mv);
+    const Assets_Model *asset = &assets_model_utah_teapot;
 
-    for (size_t i = 0; i < faces_count; ++i) {
-        HMM_Vec3 v1_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(vertices[faces[i][FACE_V1]]), 1.0f)).XYZ;
-        HMM_Vec3 v2_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(vertices[faces[i][FACE_V2]]), 1.0f)).XYZ;
-        HMM_Vec3 v3_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(vertices[faces[i][FACE_V3]]), 1.0f)).XYZ;
+    for (size_t i = 0; i < asset->face_count; ++i) {
+        const int *face = asset->faces[i];
+        HMM_Vec3 v1_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V1]]), 1.0f)).XYZ;
+        HMM_Vec3 v2_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V2]]), 1.0f)).XYZ;
+        HMM_Vec3 v3_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V3]]), 1.0f)).XYZ;
 
-        HMM_Vec3 vn1 = HMM_MulM4V4(model, HMM_V4V(vec3_from_array(normals[faces[i][FACE_VN1]]), 0.0f)).XYZ;
-        HMM_Vec3 vn2 = HMM_MulM4V4(model, HMM_V4V(vec3_from_array(normals[faces[i][FACE_VN2]]), 0.0f)).XYZ;
-        HMM_Vec3 vn3 = HMM_MulM4V4(model, HMM_V4V(vec3_from_array(normals[faces[i][FACE_VN3]]), 0.0f)).XYZ;
+        HMM_Vec3 vn1 = face[ASSETS_FACE_VN1] >= 0 ? HMM_MulM4V4(model, HMM_V4V(vec3_from_array(asset->normals[face[ASSETS_FACE_VN1]]), 0.0f)).XYZ : HMM_V3(0, 0, 0);
+        HMM_Vec3 vn2 = face[ASSETS_FACE_VN2] >= 0 ? HMM_MulM4V4(model, HMM_V4V(vec3_from_array(asset->normals[face[ASSETS_FACE_VN2]]), 0.0f)).XYZ : HMM_V3(0, 0, 0);
+        HMM_Vec3 vn3 = face[ASSETS_FACE_VN3] >= 0 ? HMM_MulM4V4(model, HMM_V4V(vec3_from_array(asset->normals[face[ASSETS_FACE_VN3]]), 0.0f)).XYZ : HMM_V3(0, 0, 0);
 
         HMM_Vec3 clipped[3], unclipped[3];
         int cc = 0, uc = 0;
@@ -168,7 +225,6 @@ int main(void) {
 
     HMM_Mat4 projection = HMM_Perspective_RH_NO(70.0f, (float)win->w / (float)win->h, 0.1f, 100.0f);
     HMM_Mat4 view = HMM_LookAt_RH(camera_pos, HMM_V3(0, 0, 0), HMM_V3(0, 1, 0));
-    HMM_Mat4 vp = HMM_MulM4(projection, view);
 
     while (RGFW_window_shouldClose(win) == RGFW_FALSE) {
         RGFW_event event;
@@ -193,7 +249,7 @@ int main(void) {
         last_frame = current_time;
 
         olivec_fill(canvas, BACKGROUND_COLOR);
-        for (size_t i = 0; i < win->w * win->h; ++i) zbuffer[i] = 1.0f;
+        for (size_t i = 0; i < (size_t)(win->w * win->h); ++i) zbuffer[i] = 1.0f;
 
         camera_yaw   -= mouse_dx * SENSITIVITY;
         camera_pitch += mouse_dy * SENSITIVITY;
@@ -230,8 +286,8 @@ int main(void) {
         draw_model(canvas, zbuffer, model, view, projection, HMM_V3(0, 0, 1));
 
         char buffer[256];
-        sprintf(buffer, "fps: %d", (int)(1/dt));
-        olivec_text(canvas, buffer, 0, 0, olivec_default_font, 4, 0xFFFFFFFF);
+        snprintf(buffer, sizeof(buffer), "fps: %d", (int)(1.0f / dt));
+        write_text(canvas, &assets_font_iosevka_regular, buffer, 8, 8, 1, 0xFFFFFFFF);
 
         angle += 90.0f * dt;
         if (angle >= 360.0f) angle -= 360.0f;
