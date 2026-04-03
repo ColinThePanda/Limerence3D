@@ -1,11 +1,10 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+
 #define RGFW_IMPLEMENTATION
 #define RGFW_DEBUG
 #include "third_party/RGFW.h"
-#define OLIVEC_IMPLEMENTATION
-#include "third_party/olive.c"
-#include <math.h>
 
 #ifdef ERROR
 #undef ERROR
@@ -15,12 +14,10 @@
 #define NOB_STRIP_PREFIX
 #include "third_party/nob.h"
 
-#include "assets.h"
-
-#define HANDMADE_MATH_USE_DEGREES
-#include "third_party/HandmadeMath.h"
+#include "core.h"
 
 #include "assets/generated/assets_model_utah_teapot.asset.c"
+#include "assets/generated/assets_model_cube.asset.c"
 #include "assets/generated/assets_font_iosevka_regular.asset.c"
 
 #define SENSITIVITY 0.1f
@@ -28,196 +25,18 @@
 #define FOREGROUND_COLOR 0xFFED9564
 #define BACKGROUND_COLOR 0xFF181818
 #define NEAR_PLANE 0.1f
-#define FAR_PLANE 5.0f
+#define FAR_PLANE 30.0f
 
-static inline HMM_Vec3 vec3_from_array(const float arr[3]) {
-    return HMM_V3(arr[0], arr[1], arr[2]);
-}
+typedef enum {
+    MOUSE_NORMAL,
+    MOUSE_DISABLED,
+} MouseMode;
 
-static bool near_plane_contains(HMM_Vec3 point)
+static MouseMode mouse_mode = MOUSE_NORMAL;
+
+static void set_mouse_mode(RGFW_window *win, MouseMode mode)
 {
-    return point.Z <= -NEAR_PLANE;
-}
-
-static HMM_Vec3 intersect_near_plane(HMM_Vec3 a, HMM_Vec3 b)
-{
-    float t = (-NEAR_PLANE - a.Z) / (b.Z - a.Z);
-    return HMM_LerpV3(a, t, b);
-}
-
-static bool same_point(HMM_Vec3 a, HMM_Vec3 b)
-{
-    const float epsilon = 0.00001f;
-    return fabsf(a.X - b.X) < epsilon &&
-           fabsf(a.Y - b.Y) < epsilon &&
-           fabsf(a.Z - b.Z) < epsilon;
-}
-
-static void append_unique_vertex(HMM_Vec3 *vertices, size_t *count, HMM_Vec3 vertex)
-{
-    if (*count > 0 && same_point(vertices[*count - 1], vertex)) {
-        return;
-    }
-
-    vertices[(*count)++] = vertex;
-}
-
-static size_t clip_triangle_against_near_plane(const HMM_Vec3 input[3], HMM_Vec3 output[4])
-{
-    size_t output_count = 0;
-    HMM_Vec3 previous = input[2];
-    bool previous_inside = near_plane_contains(previous);
-
-    for (size_t i = 0; i < 3; i++) {
-        HMM_Vec3 current = input[i];
-        bool current_inside = near_plane_contains(current);
-
-        if (previous_inside && current_inside) {
-            append_unique_vertex(output, &output_count, current);
-        } else if (previous_inside && !current_inside) {
-            append_unique_vertex(output, &output_count, intersect_near_plane(previous, current));
-        } else if (!previous_inside && current_inside) {
-            append_unique_vertex(output, &output_count, intersect_near_plane(previous, current));
-            append_unique_vertex(output, &output_count, current);
-        }
-
-        previous = current;
-        previous_inside = current_inside;
-    }
-
-    if (output_count > 1 && same_point(output[0], output[output_count - 1])) {
-        output_count -= 1;
-    }
-
-    return output_count;
-}
-
-static void write_text(Olivec_Canvas canvas, const Assets_Font *font, const char *text, int x, int y, int scale, uint32_t color) {
-    if (font == NULL || text == NULL || scale <= 0) return;
-
-    const float line_height = (font->ascent - font->descent + font->line_gap) * scale;
-    float pen_x = (float)x;
-    float baseline_y = (float)y + font->ascent * scale;
-
-    for (const unsigned char *cursor = (const unsigned char *)text; *cursor != '\0'; ++cursor) {
-        if (*cursor == '\n') {
-            pen_x = (float)x;
-            baseline_y += line_height;
-            continue;
-        }
-
-        int glyph_index = (int)(*cursor) - font->first_codepoint;
-        if (glyph_index < 0 || glyph_index >= font->glyph_count) continue;
-
-        const Assets_Glyph *glyph = &font->glyphs[glyph_index];
-        const int glyph_x = (int)(pen_x + glyph->xoff * scale);
-        const int glyph_y = (int)(baseline_y + glyph->yoff * scale);
-        const int glyph_width = glyph->x1 - glyph->x0;
-        const int glyph_height = glyph->y1 - glyph->y0;
-
-        for (int src_y = 0; src_y < glyph_height; ++src_y) {
-            for (int src_x = 0; src_x < glyph_width; ++src_x) {
-                int atlas_x = glyph->x0 + src_x;
-                int atlas_y = glyph->y0 + src_y;
-                unsigned char glyph_alpha = font->atlas_alpha[atlas_y * font->atlas_stride + atlas_x];
-                if (glyph_alpha == 0) continue;
-
-                uint32_t blended_color = (color & 0x00FFFFFF) |
-                    ((((color >> 24) & 0xFF) * glyph_alpha / 255U) << 24);
-
-                for (int dy = 0; dy < scale; ++dy) {
-                    int dst_y = glyph_y + src_y * scale + dy;
-                    if (dst_y < 0 || dst_y >= (int)canvas.height) continue;
-
-                    for (int dx = 0; dx < scale; ++dx) {
-                        int dst_x = glyph_x + src_x * scale + dx;
-                        if (dst_x < 0 || dst_x >= (int)canvas.width) continue;
-                        olivec_blend_color(&OLIVEC_PIXEL(canvas, dst_x, dst_y), blended_color);
-                    }
-                }
-            }
-        }
-
-        pen_x += glyph->xadvance * scale;
-    }
-}
-
-void draw_triangle(
-    Olivec_Canvas canvas, float *zbuffer,
-    HMM_Vec3 v1_view, HMM_Vec3 v2_view, HMM_Vec3 v3_view,
-    HMM_Mat4 projection
-) {
-    // Backface culling
-    HMM_Vec3 edge1 = HMM_SubV3(v2_view, v1_view);
-    HMM_Vec3 edge2 = HMM_SubV3(v3_view, v1_view);
-    HMM_Vec3 normal = HMM_Cross(edge1, edge2);
-    HMM_Vec3 viewDir = HMM_V3(-v1_view.X, -v1_view.Y, -v1_view.Z);
-    if (HMM_DotV3(normal, viewDir) <= 0.0f) return;
-
-    // Project to clip space
-    HMM_Vec4 v1_clip = HMM_MulM4V4(projection, HMM_V4V(v1_view, 1.0f));
-    HMM_Vec4 v2_clip = HMM_MulM4V4(projection, HMM_V4V(v2_view, 1.0f));
-    HMM_Vec4 v3_clip = HMM_MulM4V4(projection, HMM_V4V(v3_view, 1.0f));
-    HMM_Vec3 v1_ndc = HMM_V3(v1_clip.X/v1_clip.W, v1_clip.Y/v1_clip.W, v1_clip.Z/v1_clip.W);
-    HMM_Vec3 v2_ndc = HMM_V3(v2_clip.X/v2_clip.W, v2_clip.Y/v2_clip.W, v2_clip.Z/v2_clip.W);
-    HMM_Vec3 v3_ndc = HMM_V3(v3_clip.X/v3_clip.W, v3_clip.Y/v3_clip.W, v3_clip.Z/v3_clip.W);
-
-    // Screen coords
-    HMM_Vec2 p1 = HMM_V2((v1_ndc.X + 1.0f) * canvas.width  * 0.5f, (1.0f - v1_ndc.Y) * canvas.height * 0.5f);
-    HMM_Vec2 p2 = HMM_V2((v2_ndc.X + 1.0f) * canvas.width  * 0.5f, (1.0f - v2_ndc.Y) * canvas.height * 0.5f);
-    HMM_Vec2 p3 = HMM_V2((v3_ndc.X + 1.0f) * canvas.width  * 0.5f, (1.0f - v3_ndc.Y) * canvas.height * 0.5f);
-
-    // Rasterize
-    int lx, hx, ly, hy;
-    if (olivec_normalize_triangle((int)canvas.width, (int)canvas.height, (int)p1.X, (int)p1.Y, (int)p2.X, (int)p2.Y, (int)p3.X, (int)p3.Y, &lx, &hx, &ly, &hy)) {
-        for (int y = ly; y <= hy; ++y) {
-            for (int x = lx; x <= hx; ++x) {
-                int u1, u2, det;
-                if (olivec_barycentric((int)p1.X, (int)p1.Y, (int)p2.X, (int)p2.Y, (int)p3.X, (int)p3.Y, x, y, &u1, &u2, &det)) {
-                    int u3 = det - u1 - u2;
-                    float z = v1_ndc.Z * u1/det + v2_ndc.Z * u2/det + v3_ndc.Z * u3/det;
-                    
-                    if (z >= -1.0f && z <= 1.0f && z < zbuffer[y*canvas.width + x]) {
-                        zbuffer[y*canvas.width + x] = z;
-                        float fog = (z + 1.0f) * 0.5f; // 0 = near, 1 = far
-                        fog = fog * fog;
-                        float brightness = 1.0f - fog * 0.8f;
-                        uint8_t r = ((FOREGROUND_COLOR >> 16) & 0xFF) * brightness;
-                        uint8_t g = ((FOREGROUND_COLOR >>  8) & 0xFF) * brightness;
-                        uint8_t b = ((FOREGROUND_COLOR      ) & 0xFF) * brightness;
-                        OLIVEC_PIXEL(canvas, x, y) = 0xFF000000 | (r << 16) | (g << 8) | b;
-                    }
-                }
-            }
-        }
-    }
-}
-
-void draw_model(Olivec_Canvas canvas, float *zbuffer, HMM_Mat4 model, HMM_Mat4 view, HMM_Mat4 projection) {
-    HMM_Mat4 mv  = HMM_MulM4(view, model);
-    const Assets_Model *asset = &assets_model_utah_teapot;
-
-    for (size_t i = 0; i < asset->face_count; i++) {
-        const int *face = asset->faces[i];
-        HMM_Vec3 triangle[3] = {
-            HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V1]]), 1.0f)).XYZ,
-            HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V2]]), 1.0f)).XYZ,
-            HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V3]]), 1.0f)).XYZ,
-        };
-        HMM_Vec3 clipped[4];
-        size_t clipped_count = clip_triangle_against_near_plane(triangle, clipped);
-
-        for (size_t j = 1; j + 1 < clipped_count; ++j) {
-            draw_triangle(canvas, zbuffer, clipped[0], clipped[j], clipped[j + 1], projection);
-        }
-    }
-}
-
-typedef enum { MOUSE_NORMAL, MOUSE_DISABLED } MouseMode;
-MouseMode mouseMode = MOUSE_NORMAL;
-
-void set_mouse_mode(RGFW_window* win, MouseMode mode) {
-    mouseMode = mode;
+    mouse_mode = mode;
     if (mode == MOUSE_DISABLED) {
         RGFW_window_showMouse(win, 0);
         RGFW_window_holdMouse(win);
@@ -227,88 +46,186 @@ void set_mouse_mode(RGFW_window* win, MouseMode mode) {
     }
 }
 
-int main(void) {
-    RGFW_window *win = RGFW_createWindow("Spinning Triangle", 100, 100, 800, 600, RGFW_windowCenter | RGFW_windowNoResize);
-    set_mouse_mode(win, MOUSE_DISABLED);
+static HMM_Mat4 make_model_matrix(HMM_Vec3 position, HMM_Vec3 scale, float rotation_degrees, HMM_Vec3 axis)
+{
+    HMM_Mat4 translation = HMM_Translate(position);
+    HMM_Mat4 rotation = HMM_Rotate_RH(rotation_degrees, axis);
+    HMM_Mat4 scaling = HMM_Scale(scale);
+    return HMM_MulM4(translation, HMM_MulM4(rotation, scaling));
+}
 
+static void draw_test_scene(
+    Olivec_Canvas canvas,
+    float *zbuffer,
+    HMM_Mat4 view,
+    HMM_Mat4 projection,
+    const Core_Mesh_Draw_Options *draw_options,
+    float teapot_rotation
+)
+{
+    core_draw_model(
+        &assets_model_cube,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(0.0f, -1.55f, 0.0f), HMM_V3(8.0f, 0.30f, 8.0f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
+        view,
+        projection,
+        0xFF3C4650,
+        draw_options
+    );
+
+    core_draw_model(
+        &assets_model_cube,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(0.0f, 0.1f, -4.6f), HMM_V3(7.5f, 3.0f, 0.35f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
+        view,
+        projection,
+        0xFF25313A,
+        draw_options
+    );
+
+    core_draw_model(
+        &assets_model_cube,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(-3.1f, -0.15f, -1.6f), HMM_V3(0.8f, 2.8f, 0.8f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
+        view,
+        projection,
+        0xFFC85A44,
+        draw_options
+    );
+
+    core_draw_model(
+        &assets_model_cube,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(3.0f, -0.35f, -1.4f), HMM_V3(1.3f, 1.9f, 0.9f), 22.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
+        view,
+        projection,
+        0xFF5E8E3E,
+        draw_options
+    );
+
+    core_draw_model(
+        &assets_model_cube,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(-1.75f, -0.95f, 2.1f), HMM_V3(1.6f, 0.55f, 2.3f), 18.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
+        view,
+        projection,
+        0xFF4979A8,
+        draw_options
+    );
+
+    core_draw_model(
+        &assets_model_cube,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(2.1f, -0.55f, 1.8f), HMM_V3(2.7f, 0.35f, 0.8f), -28.0f, HMM_V3(1.0f, 0.0f, 0.0f)),
+        view,
+        projection,
+        0xFF8A6BCE,
+        draw_options
+    );
+
+    core_draw_model(
+        &assets_model_cube,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(0.0f, -0.95f, 0.0f), HMM_V3(1.8f, 0.6f, 1.8f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
+        view,
+        projection,
+        0xFFD2B870,
+        draw_options
+    );
+
+    core_draw_model(
+        &assets_model_utah_teapot,
+        canvas,
+        zbuffer,
+        make_model_matrix(HMM_V3(0.0f, 0.1f, 0.0f), HMM_V3(1.0f, 1.0f, 1.0f), teapot_rotation, HMM_V3(0.0f, 1.0f, 0.0f)),
+        view,
+        projection,
+        FOREGROUND_COLOR,
+        draw_options
+    );
+}
+
+int main(void)
+{
+    RGFW_window *win = RGFW_createWindow("Test Scene", 100, 100, 800, 600, RGFW_windowCenter | RGFW_windowNoResize);
     u8 *pixels = (u8 *)RGFW_alloc(win->w * win->h * 4);
     float *zbuffer = (float *)malloc(win->w * win->h * sizeof(float));
     RGFW_surface *surface = RGFW_window_createSurface(win, pixels, win->w, win->h, RGFW_formatRGBA8);
-    RGFW_window_setExitKey(win, RGFW_escape);
-    Olivec_Canvas canvas = olivec_canvas((uint32_t *)pixels, win->w, win->h, win->w);
-
+    Olivec_Canvas canvas = core_make_canvas((uint32_t *)pixels, win->w, win->h, win->w);
+    Core_Fly_Camera camera = {
+        .position = HMM_V3(0.0f, 1.35f, 8.0f),
+        .pitch = 8.0f,
+        .yaw = 180.0f,
+    };
+    Core_Mesh_Draw_Options draw_options = CORE_MESH_DRAW_OPTIONS_DEFAULT;
     float angle = 0.0f;
     uint64_t last_frame = nanos_since_unspecified_epoch();
+    HMM_Mat4 projection = HMM_Perspective_RH_NO(70.0f, (float)win->w / (float)win->h, NEAR_PLANE, FAR_PLANE);
 
-    HMM_Vec3 camera_pos = HMM_V3(0, 0, 2);
-    float camera_pitch = 0.0f;
-    float camera_yaw = 180.0f;
+    draw_options.near_plane = NEAR_PLANE;
+    draw_options.fog_color = BACKGROUND_COLOR;
+    draw_options.fog_power = 1.8f;
 
-    HMM_Mat4 projection = HMM_Perspective_RH_NO(70.0f, (float)win->w / (float)win->h, 0.1f, 100.0f);
-    HMM_Mat4 view = HMM_LookAt_RH(camera_pos, HMM_V3(0, 0, 0), HMM_V3(0, 1, 0));
+    set_mouse_mode(win, MOUSE_DISABLED);
+    RGFW_window_setExitKey(win, RGFW_escape);
 
     while (RGFW_window_shouldClose(win) == RGFW_FALSE) {
         RGFW_event event;
-        float mouse_dx = 0, mouse_dy = 0;
+
         while (RGFW_window_checkEvent(win, &event)) {
             if (event.type == RGFW_quit) break;
-            if (event.type == RGFW_focusIn && mouseMode == MOUSE_DISABLED)
+            if (event.type == RGFW_focusIn && mouse_mode == MOUSE_DISABLED) {
                 RGFW_window_holdMouse(win);
-            if (event.type == RGFW_mousePosChanged && mouseMode == MOUSE_DISABLED) {
-                camera_yaw   -= event.mouse.vecX * SENSITIVITY;
-                camera_pitch += event.mouse.vecY * SENSITIVITY;
+            }
+            if (event.type == RGFW_mousePosChanged && mouse_mode == MOUSE_DISABLED) {
+                core_fly_camera_look(&camera,
+                                     -event.mouse.vecX * SENSITIVITY,
+                                     event.mouse.vecY * SENSITIVITY,
+                                     -89.9f,
+                                     89.9f);
             }
         }
 
-        if (RGFW_isKeyPressed(RGFW_escape))
+        if (RGFW_isKeyPressed(RGFW_escape)) {
             set_mouse_mode(win, MOUSE_NORMAL);
-        if (RGFW_isMousePressed(RGFW_mouseLeft) && mouseMode == MOUSE_NORMAL)
+        }
+        if (RGFW_isMousePressed(RGFW_mouseLeft) && mouse_mode == MOUSE_NORMAL) {
             set_mouse_mode(win, MOUSE_DISABLED);
-        
+        }
+
         uint64_t current_time = nanos_since_unspecified_epoch();
         float dt = (float)(current_time - last_frame) / NANOS_PER_SEC;
+        float forward_distance = 0.0f;
+        float strafe_distance = 0.0f;
+        float vertical_distance = 0.0f;
+        HMM_Mat4 view;
+        char buffer[256];
+
         last_frame = current_time;
 
-        olivec_fill(canvas, BACKGROUND_COLOR);
-        for (size_t i = 0; i < (size_t)(win->w * win->h); i++) zbuffer[i] = 1.0f;
+        core_begin_frame(canvas, zbuffer, BACKGROUND_COLOR, 1.0f);
 
-        camera_yaw   -= mouse_dx * SENSITIVITY;
-        camera_pitch += mouse_dy * SENSITIVITY;
+        if (RGFW_isKeyDown(RGFW_w)) forward_distance += MOVEMENT_SPEED * dt;
+        if (RGFW_isKeyDown(RGFW_s)) forward_distance -= MOVEMENT_SPEED * dt;
+        if (RGFW_isKeyDown(RGFW_a)) strafe_distance -= MOVEMENT_SPEED * dt;
+        if (RGFW_isKeyDown(RGFW_d)) strafe_distance += MOVEMENT_SPEED * dt;
+        if (RGFW_isKeyDown(RGFW_space)) vertical_distance += MOVEMENT_SPEED * dt;
+        if (RGFW_isKeyDown(RGFW_shiftL) || RGFW_isKeyDown(RGFW_shiftR)) vertical_distance -= MOVEMENT_SPEED * dt;
 
-        if (camera_pitch > 89.9f) camera_pitch = 89.9f;
-        if (camera_pitch < -89.9f) camera_pitch = -89.9f;
+        core_fly_camera_move(&camera, forward_distance, strafe_distance, vertical_distance);
 
-        HMM_Vec3 forward = {
-            HMM_CosF(camera_pitch) * HMM_SinF(camera_yaw),
-           -HMM_SinF(camera_pitch),
-            HMM_CosF(camera_pitch) * HMM_CosF(camera_yaw)
-        };
+        view = core_fly_camera_view(camera);
+        draw_test_scene(canvas, zbuffer, view, projection, &draw_options, angle);
 
-        HMM_Vec3 flat_forward = HMM_NormV3(HMM_V3(forward.X, 0, forward.Z));
-        HMM_Vec3 right = HMM_Cross(flat_forward, HMM_V3(0, 1, 0));
-        
-        if (RGFW_isKeyDown(RGFW_w))
-            camera_pos = HMM_AddV3(camera_pos, HMM_MulV3F(flat_forward, MOVEMENT_SPEED * dt));
-        if (RGFW_isKeyDown(RGFW_s))
-            camera_pos = HMM_SubV3(camera_pos, HMM_MulV3F(flat_forward, MOVEMENT_SPEED * dt));
-        if (RGFW_isKeyDown(RGFW_a))
-            camera_pos = HMM_SubV3(camera_pos, HMM_MulV3F(right, MOVEMENT_SPEED * dt));
-        if (RGFW_isKeyDown(RGFW_d))
-            camera_pos = HMM_AddV3(camera_pos, HMM_MulV3F(right, MOVEMENT_SPEED * dt));
-        if (RGFW_isKeyDown(RGFW_space))
-            camera_pos = HMM_AddV3(camera_pos, HMM_MulV3F(HMM_V3(0.0f, 1.0f, 0.0f), MOVEMENT_SPEED * dt));
-         if (RGFW_isKeyDown(RGFW_shiftL) || RGFW_isKeyDown(RGFW_shiftR))
-            camera_pos = HMM_AddV3(camera_pos, HMM_MulV3F(HMM_V3(0.0f, 1.0f, 0.0f), -MOVEMENT_SPEED * dt));
-
-        HMM_Vec3 center = HMM_AddV3(camera_pos, forward);
-        view = HMM_LookAt_RH(camera_pos, center, HMM_V3(0, 1, 0));
-
-        HMM_Mat4 model = HMM_Rotate_RH(angle, HMM_V3(0, 1, 0));
-        draw_model(canvas, zbuffer, model, view, projection);
-
-        char buffer[256];
         snprintf(buffer, sizeof(buffer), "fps: %d", (int)(1.0f / dt));
-        write_text(canvas, &assets_font_iosevka_regular, buffer, 8, 8, 1, 0xFFFFFFFF);
+        core_draw_text(canvas, &assets_font_iosevka_regular, buffer, 8, 8, 1, 0xFFFFFFFF);
 
         angle += 90.0f * dt;
         if (angle >= 360.0f) angle -= 360.0f;

@@ -373,13 +373,13 @@ static bool build_main(bool release)
     cmd_append(&cmd, "-Wno-missing-braces");
 
     if (release) {
-        cmd_append(&cmd, "-O3", "-march=native", "-ffast-math", "-flto");
+        cmd_append(&cmd, "-O3", "-DNDEBUG", "-march=native", "-ffast-math", "-flto", "-fno-strict-aliasing");
     } else {
-        cmd_append(&cmd, "-ggdb", "-O0");
+        cmd_append(&cmd, "-ggdb");
     }
 
     nob_cc_output(&cmd, "main");
-    nob_cc_inputs(&cmd, "main.c");
+    nob_cc_inputs(&cmd, "main.c", "core.c");
     append_platform_libraries(&cmd);
     return cmd_run(&cmd);
 }

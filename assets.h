@@ -200,6 +200,12 @@ typedef struct {
 } Assets_Obj_Face;
 
 typedef struct {
+    int v;
+    int vt;
+    int vn;
+} Assets_Obj_Face_Vertex;
+
+typedef struct {
     FILE *file;
 } Assets_File_Writer_Context;
 
@@ -385,6 +391,19 @@ static Assets_String_View assets_sv_trim_left(Assets_String_View view)
     return view;
 }
 
+static Assets_String_View assets_sv_trim_right(Assets_String_View view)
+{
+    while (view.count > 0 && isspace((unsigned char)view.data[view.count - 1])) {
+        view.count -= 1;
+    }
+    return view;
+}
+
+static Assets_String_View assets_sv_trim(Assets_String_View view)
+{
+    return assets_sv_trim_right(assets_sv_trim_left(view));
+}
+
 static void assets_sv_chop_left(Assets_String_View *view, size_t count)
 {
     if (count > view->count) count = view->count;
@@ -402,64 +421,108 @@ static Assets_String_View assets_sv_chop_by_delim(Assets_String_View *view, char
     return head;
 }
 
+static Assets_String_View assets_sv_strip_comment(Assets_String_View view)
+{
+    for (size_t i = 0; i < view.count; ++i) {
+        if (view.data[i] == '#') {
+            view.count = i;
+            break;
+        }
+    }
+    return view;
+}
+
+static Assets_String_View assets_sv_chop_token(Assets_String_View *view)
+{
+    size_t index = 0;
+
+    *view = assets_sv_trim_left(*view);
+    while (index < view->count && !isspace((unsigned char)view->data[index])) index += 1;
+
+    Assets_String_View head = assets_sv_from_parts(view->data, index);
+    assets_sv_chop_left(view, index);
+    *view = assets_sv_trim_left(*view);
+    return head;
+}
+
 static bool assets_sv_eq(Assets_String_View view, const char *text)
 {
     size_t text_count = strlen(text);
     return view.count == text_count && memcmp(view.data, text, text_count) == 0;
 }
 
-static int assets_parse_non_negative_index(const char *token, char **endptr)
+static int assets_parse_obj_index(const char *token, char **endptr, size_t count)
 {
     long value = strtol(token, endptr, 10);
-    if (value <= 0) return -1;
-    return (int)value - 1;
+
+    if (value > 0) {
+        value -= 1;
+    } else if (value < 0) {
+        value = (long)count + value;
+    } else {
+        return -1;
+    }
+
+    if (value < 0 || (size_t)value >= count) return -1;
+    return (int)value;
 }
 
-static Assets_Status assets_parse_face_vertex(const char *input_path, size_t line_number, Assets_String_View *line, int *v, int *vt, int *vn, Assets_Error *error)
+static Assets_Status assets_parse_face_vertex(
+    const char *input_path,
+    size_t line_number,
+    Assets_String_View token,
+    size_t vertex_count,
+    size_t texcoord_count,
+    size_t normal_count,
+    Assets_Obj_Face_Vertex *out,
+    Assets_Error *error
+)
 {
     char *endptr;
 
-    *line = assets_sv_trim_left(*line);
-    if (line->count == 0) {
+    token = assets_sv_trim(token);
+    if (token.count == 0) {
         assets_errorf(error, input_path, line_number, "Malformed face entry");
         return ASSETS_STATUS_ERROR;
     }
 
-    *v = assets_parse_non_negative_index(line->data, &endptr);
-    if (endptr == line->data || *v < 0) {
-        assets_errorf(error, input_path, line_number, "Face vertex index must be positive");
+    out->v = assets_parse_obj_index(token.data, &endptr, vertex_count);
+    if (endptr == token.data || out->v < 0) {
+        assets_errorf(error, input_path, line_number, "Face vertex index is out of range");
         return ASSETS_STATUS_ERROR;
     }
-    assets_sv_chop_left(line, (size_t)(endptr - line->data));
+    assets_sv_chop_left(&token, (size_t)(endptr - token.data));
 
-    *vt = -1;
-    if (line->count > 0 && line->data[0] == '/') {
-        assets_sv_chop_left(line, 1);
-        if (line->count > 0 && line->data[0] != '/' && !isspace((unsigned char)line->data[0])) {
-            *vt = assets_parse_non_negative_index(line->data, &endptr);
-            if (endptr == line->data || *vt < 0) {
-                assets_errorf(error, input_path, line_number, "Texture coordinate index must be positive");
+    out->vt = -1;
+    if (token.count > 0 && token.data[0] == '/') {
+        assets_sv_chop_left(&token, 1);
+        if (token.count > 0 && token.data[0] != '/') {
+            out->vt = assets_parse_obj_index(token.data, &endptr, texcoord_count);
+            if (endptr == token.data || out->vt < 0) {
+                assets_errorf(error, input_path, line_number, "Texture coordinate index is out of range");
                 return ASSETS_STATUS_ERROR;
             }
-            assets_sv_chop_left(line, (size_t)(endptr - line->data));
+            assets_sv_chop_left(&token, (size_t)(endptr - token.data));
         }
     }
 
-    *vn = -1;
-    if (line->count > 0 && line->data[0] == '/') {
-        assets_sv_chop_left(line, 1);
-        if (line->count > 0 && !isspace((unsigned char)line->data[0])) {
-            *vn = assets_parse_non_negative_index(line->data, &endptr);
-            if (endptr == line->data || *vn < 0) {
-                assets_errorf(error, input_path, line_number, "Normal index must be positive");
+    out->vn = -1;
+    if (token.count > 0 && token.data[0] == '/') {
+        assets_sv_chop_left(&token, 1);
+        if (token.count > 0) {
+            out->vn = assets_parse_obj_index(token.data, &endptr, normal_count);
+            if (endptr == token.data || out->vn < 0) {
+                assets_errorf(error, input_path, line_number, "Normal index is out of range");
                 return ASSETS_STATUS_ERROR;
             }
-            assets_sv_chop_left(line, (size_t)(endptr - line->data));
+            assets_sv_chop_left(&token, (size_t)(endptr - token.data));
         }
     }
 
-    while (line->count > 0 && !isspace((unsigned char)line->data[0])) {
-        assets_sv_chop_left(line, 1);
+    token = assets_sv_trim(token);
+    if (token.count != 0) {
+        assets_errorf(error, input_path, line_number, "Malformed face entry");
+        return ASSETS_STATUS_ERROR;
     }
 
     return ASSETS_STATUS_OK;
@@ -686,16 +749,16 @@ Assets_Status assets_load_model_obj(const char *input_path, const Assets_Model_O
     Assets_Vec2 *texcoords = NULL;
     Assets_Vec3 *normals = NULL;
     Assets_Obj_Face *faces = NULL;
+    Assets_Obj_Face_Vertex *face_vertices = NULL;
     size_t vertex_count = 0, vertex_capacity = 0;
     size_t texcoord_count = 0, texcoord_capacity = 0;
     size_t normal_count = 0, normal_capacity = 0;
     size_t face_count = 0, face_capacity = 0;
+    size_t face_vertex_count = 0, face_vertex_capacity = 0;
     float min_x = 0.0f, max_x = 0.0f;
     float min_y = 0.0f, max_y = 0.0f;
     float min_z = 0.0f, max_z = 0.0f;
     bool have_bounds = false;
-    bool saw_object = false;
-    size_t object_line = 0;
     size_t component_count = 0;
     int *wave = NULL;
     size_t wave_count = 0, wave_capacity = 0;
@@ -713,11 +776,10 @@ Assets_Status assets_load_model_obj(const char *input_path, const Assets_Model_O
 
     content = assets_sv_from_parts((const char *)file_data, file_size);
     for (size_t line_number = 1; content.count > 0; ++line_number) {
-        Assets_String_View line = assets_sv_trim_left(assets_sv_chop_by_delim(&content, '\n'));
+        Assets_String_View line = assets_sv_trim(assets_sv_strip_comment(assets_sv_chop_by_delim(&content, '\n')));
         if (line.count == 0 || line.data[0] == '#') continue;
 
-        Assets_String_View kind = assets_sv_chop_by_delim(&line, ' ');
-        line = assets_sv_trim_left(line);
+        Assets_String_View kind = assets_sv_chop_token(&line);
 
         if (assets_sv_eq(kind, "v")) {
             Assets_Obj_Vertex vertex = {0};
@@ -807,51 +869,57 @@ Assets_Status assets_load_model_obj(const char *input_path, const Assets_Model_O
 
             ASSETS_ARRAY_APPEND(normals, normal_count, normal_capacity, normal, error);
         } else if (assets_sv_eq(kind, "f")) {
-            Assets_Obj_Face face = {0};
-            int parsed = 0;
-            int face_index = (int)face_count;
+            face_vertex_count = 0;
 
             while (line.count > 0) {
-                line = assets_sv_trim_left(line);
-                if (line.count == 0) break;
-                if (parsed >= 3) {
-                    assets_errorf(error, input_path, line_number, "Only triangle faces are supported");
+                Assets_Obj_Face_Vertex face_vertex = {0};
+                Assets_String_View token = assets_sv_chop_token(&line);
+                if (token.count == 0) break;
+
+                if (assets_parse_face_vertex(input_path, line_number, token,
+                                             vertex_count, texcoord_count, normal_count,
+                                             &face_vertex, error) != ASSETS_STATUS_OK) {
                     goto defer;
                 }
 
-                if (assets_parse_face_vertex(input_path, line_number, &line,
-                                             &face.v[parsed], &face.vt[parsed], &face.vn[parsed],
-                                             error) != ASSETS_STATUS_OK) {
-                    goto defer;
-                }
-
-                if (face.v[parsed] < 0 || (size_t)face.v[parsed] >= vertex_count) {
-                    assets_errorf(error, input_path, line_number, "Face references missing vertex");
-                    goto defer;
-                }
-
-                ASSETS_ARRAY_APPEND(vertices[face.v[parsed]].faces.items,
-                                    vertices[face.v[parsed]].faces.count,
-                                    vertices[face.v[parsed]].faces.capacity,
-                                    face_index,
-                                    error);
-                parsed += 1;
+                ASSETS_ARRAY_APPEND(face_vertices, face_vertex_count, face_vertex_capacity, face_vertex, error);
             }
 
-            if (parsed != 3) {
-                assets_errorf(error, input_path, line_number, "Face must have exactly 3 vertices");
+            if (face_vertex_count < 3) {
+                assets_errorf(error, input_path, line_number, "Face must have at least 3 vertices");
                 goto defer;
             }
 
-            ASSETS_ARRAY_APPEND(faces, face_count, face_capacity, face, error);
-        } else if (assets_sv_eq(kind, "o")) {
-            if (saw_object) {
-                assets_errorf(error, input_path, line_number, "Only one object per OBJ is supported (previous object at line %zu)", object_line);
-                goto defer;
+            for (size_t i = 1; i + 1 < face_vertex_count; ++i) {
+                Assets_Obj_Face face = {0};
+                int face_index = (int)face_count;
+                const Assets_Obj_Face_Vertex triangle[3] = {
+                    face_vertices[0],
+                    face_vertices[i],
+                    face_vertices[i + 1],
+                };
+
+                for (int lane = 0; lane < 3; ++lane) {
+                    face.v[lane] = triangle[lane].v;
+                    face.vt[lane] = triangle[lane].vt;
+                    face.vn[lane] = triangle[lane].vn;
+
+                    ASSETS_ARRAY_APPEND(vertices[face.v[lane]].faces.items,
+                                        vertices[face.v[lane]].faces.count,
+                                        vertices[face.v[lane]].faces.capacity,
+                                        face_index,
+                                        error);
+                }
+
+                ASSETS_ARRAY_APPEND(faces, face_count, face_capacity, face, error);
             }
-            saw_object = true;
-            object_line = line_number;
-        } else if (assets_sv_eq(kind, "mtllib") || assets_sv_eq(kind, "usemtl") || assets_sv_eq(kind, "s")) {
+
+            face_vertex_count = 0;
+        } else if (assets_sv_eq(kind, "o") ||
+                   assets_sv_eq(kind, "g") ||
+                   assets_sv_eq(kind, "mtllib") ||
+                   assets_sv_eq(kind, "usemtl") ||
+                   assets_sv_eq(kind, "s")) {
             continue;
         } else {
             assets_errorf(error, input_path, line_number, "Unknown OBJ directive");
@@ -983,6 +1051,7 @@ defer:
     free(texcoords);
     free(normals);
     free(faces);
+    free(face_vertices);
     free(file_data);
     free(wave);
     free(next_wave);
