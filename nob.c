@@ -35,6 +35,40 @@ typedef struct {
 } Asset_Discovery_Context;
 
 static Cmd cmd = {0};
+static const char *lua_sources[] = {
+    "third_party/lua-5.5.0/src/lapi.c",
+    "third_party/lua-5.5.0/src/lauxlib.c",
+    "third_party/lua-5.5.0/src/lbaselib.c",
+    "third_party/lua-5.5.0/src/lcode.c",
+    "third_party/lua-5.5.0/src/lcorolib.c",
+    "third_party/lua-5.5.0/src/lctype.c",
+    "third_party/lua-5.5.0/src/ldblib.c",
+    "third_party/lua-5.5.0/src/ldebug.c",
+    "third_party/lua-5.5.0/src/ldo.c",
+    "third_party/lua-5.5.0/src/ldump.c",
+    "third_party/lua-5.5.0/src/lfunc.c",
+    "third_party/lua-5.5.0/src/lgc.c",
+    "third_party/lua-5.5.0/src/linit.c",
+    "third_party/lua-5.5.0/src/liolib.c",
+    "third_party/lua-5.5.0/src/llex.c",
+    "third_party/lua-5.5.0/src/lmathlib.c",
+    "third_party/lua-5.5.0/src/lmem.c",
+    "third_party/lua-5.5.0/src/loadlib.c",
+    "third_party/lua-5.5.0/src/lobject.c",
+    "third_party/lua-5.5.0/src/lopcodes.c",
+    "third_party/lua-5.5.0/src/loslib.c",
+    "third_party/lua-5.5.0/src/lparser.c",
+    "third_party/lua-5.5.0/src/lstate.c",
+    "third_party/lua-5.5.0/src/lstring.c",
+    "third_party/lua-5.5.0/src/lstrlib.c",
+    "third_party/lua-5.5.0/src/ltable.c",
+    "third_party/lua-5.5.0/src/ltablib.c",
+    "third_party/lua-5.5.0/src/ltm.c",
+    "third_party/lua-5.5.0/src/lundump.c",
+    "third_party/lua-5.5.0/src/lutf8lib.c",
+    "third_party/lua-5.5.0/src/lvm.c",
+    "third_party/lua-5.5.0/src/lzio.c",
+};
 
 static void log_assets_error(const Assets_Error *error)
 {
@@ -53,6 +87,7 @@ static void begin_cc(Cmd *cmd)
     nob_cc(cmd);
     nob_cc_flags(cmd);
     cmd_append(cmd, "-I.");
+    cmd_append(cmd, "-Ithird_party/lua-5.5.0/src");
 }
 
 static const char *generated_asset_output_path(const char *symbol_name)
@@ -379,7 +414,10 @@ static bool build_main(bool release)
     }
 
     nob_cc_output(&cmd, "main");
-    nob_cc_inputs(&cmd, "main.c", "core.c");
+    nob_cc_inputs(&cmd, "main.c", "core.c", "lua_api.c");
+    for (size_t i = 0; i < NOB_ARRAY_LEN(lua_sources); ++i) {
+        cmd_append(&cmd, lua_sources[i]);
+    }
     append_platform_libraries(&cmd);
     return cmd_run(&cmd);
 }
@@ -391,12 +429,17 @@ int main(int argc, char **argv)
         argv,
         "main.c",
         "assets.h",
+        "lua_api.c",
+        "lua_api.h",
         "third_party/nob.h",
         "third_party/stb_image.h",
         "third_party/stb_truetype.h",
         "third_party/RGFW.h",
         "third_party/olive.c",
-        "third_party/HandmadeMath.h"
+        "third_party/HandmadeMath.h",
+        "third_party/lua-5.5.0/src/lua.h",
+        "third_party/lua-5.5.0/src/lauxlib.h",
+        "third_party/lua-5.5.0/src/lualib.h"
     );
 
     bool run = false;

@@ -15,6 +15,7 @@
 #include "third_party/nob.h"
 
 #include "core.h"
+#include "lua_api.h"
 
 #include "assets/generated/assets_model_utah_teapot.asset.c"
 #include "assets/generated/assets_model_cube.asset.c"
@@ -205,6 +206,19 @@ int main(void)
     float angle = 0.0f;
     uint64_t last_frame = nanos_since_unspecified_epoch();
     HMM_Mat4 projection = HMM_Perspective_RH_NO(70.0f, (float)win->w / (float)win->h, NEAR_PLANE, FAR_PLANE);
+    Lua_API_Context lua_context = {
+        .window = win,
+        .canvas = canvas,
+        .zbuffer = zbuffer,
+    };
+
+    if (!lua_api_init(&lua_context)) {
+        return 1;
+    }
+    if (!lua_api_run_string("hello_world(); local cam = core.camera({0, 1, 8}, 8, 180); assert(rgfw.get_width() > 0); assert(math.abs(hmm.len3(hmm.vec3(3, 4, 0)) - 5.0) < 0.001); assert(cam:view().type == 'mat4')")) {
+        lua_api_shutdown();
+        return 1;
+    }
 
     draw_options.near_plane = NEAR_PLANE;
     draw_options.light_direction_world = HMM_V3(0.0f, -1.0f, -1.0f);
@@ -278,6 +292,7 @@ int main(void)
     RGFW_surface_free(surface);
     RGFW_free(pixels);
     free(zbuffer);
+    lua_api_shutdown();
     RGFW_window_close(win);
 
     return 0;

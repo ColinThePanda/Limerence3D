@@ -641,3 +641,4 @@ HMM_Mat4 core_fly_camera_view(Core_Fly_Camera camera)
     HMM_Vec3 forward = core_fly_camera_forward(camera);
     return HMM_LookAt_RH(camera.position, HMM_AddV3(camera.position, forward), HMM_V3(0.0f, 1.0f, 0.0f));
 }
+
