@@ -32,6 +32,13 @@ typedef enum {
     MOUSE_DISABLED,
 } MouseMode;
 
+typedef struct {
+    const Assets_Model *asset;
+    HMM_Mat4 model;
+    uint32_t color;
+    float view_depth;
+} Scene_Draw_Call;
+
 static MouseMode mouse_mode = MOUSE_NORMAL;
 
 static void set_mouse_mode(RGFW_window *win, MouseMode mode)
@@ -54,6 +61,34 @@ static HMM_Mat4 make_model_matrix(HMM_Vec3 position, HMM_Vec3 scale, float rotat
     return HMM_MulM4(translation, HMM_MulM4(rotation, scaling));
 }
 
+static void append_draw_call(
+    Scene_Draw_Call *calls,
+    size_t *call_count,
+    const Assets_Model *asset,
+    HMM_Mat4 model,
+    uint32_t color,
+    HMM_Mat4 view
+)
+{
+    HMM_Vec3 view_center = HMM_MulM4V4(view, HMM_V4V(model.Columns[3].XYZ, 1.0f)).XYZ;
+
+    calls[*call_count].asset = asset;
+    calls[*call_count].model = model;
+    calls[*call_count].color = color;
+    calls[*call_count].view_depth = -view_center.Z;
+    *call_count += 1;
+}
+
+static int compare_draw_call_front_to_back(const void *lhs, const void *rhs)
+{
+    const Scene_Draw_Call *a = lhs;
+    const Scene_Draw_Call *b = rhs;
+
+    if (a->view_depth < b->view_depth) return -1;
+    if (a->view_depth > b->view_depth) return 1;
+    return 0;
+}
+
 static void draw_test_scene(
     Olivec_Canvas canvas,
     float *zbuffer,
@@ -63,98 +98,100 @@ static void draw_test_scene(
     float teapot_rotation
 )
 {
-    core_draw_model(
+    Scene_Draw_Call calls[8];
+    size_t call_count = 0;
+
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_cube,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(0.0f, -1.55f, 0.0f), HMM_V3(8.0f, 0.30f, 8.0f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
-        view,
-        projection,
         0xFF3C4650,
-        draw_options
+        view
     );
 
-    core_draw_model(
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_cube,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(0.0f, 0.1f, -4.6f), HMM_V3(7.5f, 3.0f, 0.35f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
-        view,
-        projection,
         0xFF25313A,
-        draw_options
+        view
     );
 
-    core_draw_model(
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_cube,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(-3.1f, -0.15f, -1.6f), HMM_V3(0.8f, 2.8f, 0.8f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
-        view,
-        projection,
         0xFFC85A44,
-        draw_options
+        view
     );
 
-    core_draw_model(
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_cube,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(3.0f, -0.35f, -1.4f), HMM_V3(1.3f, 1.9f, 0.9f), 22.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
-        view,
-        projection,
         0xFF5E8E3E,
-        draw_options
+        view
     );
 
-    core_draw_model(
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_cube,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(-1.75f, -0.95f, 2.1f), HMM_V3(1.6f, 0.55f, 2.3f), 18.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
-        view,
-        projection,
         0xFF4979A8,
-        draw_options
+        view
     );
 
-    core_draw_model(
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_cube,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(2.1f, -0.55f, 1.8f), HMM_V3(2.7f, 0.35f, 0.8f), -28.0f, HMM_V3(1.0f, 0.0f, 0.0f)),
-        view,
-        projection,
         0xFF8A6BCE,
-        draw_options
+        view
     );
 
-    core_draw_model(
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_cube,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(0.0f, -0.95f, 0.0f), HMM_V3(1.8f, 0.6f, 1.8f), 0.0f, HMM_V3(0.0f, 1.0f, 0.0f)),
-        view,
-        projection,
         0xFFD2B870,
-        draw_options
+        view
     );
 
-    core_draw_model(
+    append_draw_call(
+        calls,
+        &call_count,
         &assets_model_utah_teapot,
-        canvas,
-        zbuffer,
         make_model_matrix(HMM_V3(0.0f, 0.1f, 0.0f), HMM_V3(1.0f, 1.0f, 1.0f), teapot_rotation, HMM_V3(0.0f, 1.0f, 0.0f)),
-        view,
-        projection,
         FOREGROUND_COLOR,
-        draw_options
+        view
     );
+
+    qsort(calls, call_count, sizeof(calls[0]), compare_draw_call_front_to_back);
+
+    for (size_t i = 0; i < call_count; ++i) {
+        core_draw_model(
+            calls[i].asset,
+            canvas,
+            zbuffer,
+            calls[i].model,
+            view,
+            projection,
+            calls[i].color,
+            draw_options
+        );
+    }
 }
 
 int main(void)
 {
-    RGFW_window *win = RGFW_createWindow("Test Scene", 100, 100, 800, 600, RGFW_windowCenter | RGFW_windowNoResize);
+    RGFW_window *win = RGFW_createWindow("Test Scene", 100, 100, 1920, 1080, RGFW_windowCenter | RGFW_windowNoResize);
     u8 *pixels = (u8 *)RGFW_alloc(win->w * win->h * 4);
     float *zbuffer = (float *)malloc(win->w * win->h * sizeof(float));
     RGFW_surface *surface = RGFW_window_createSurface(win, pixels, win->w, win->h, RGFW_formatRGBA8);
@@ -170,6 +207,10 @@ int main(void)
     HMM_Mat4 projection = HMM_Perspective_RH_NO(70.0f, (float)win->w / (float)win->h, NEAR_PLANE, FAR_PLANE);
 
     draw_options.near_plane = NEAR_PLANE;
+    draw_options.light_direction_world = HMM_V3(0.35f, -1.0f, 0.2f);
+    draw_options.ambient_strength = 0.20f;
+    draw_options.diffuse_strength = 0.90f;
+    draw_options.specular_strength = 0.0f;
     draw_options.fog_color = BACKGROUND_COLOR;
     draw_options.fog_power = 1.8f;
 

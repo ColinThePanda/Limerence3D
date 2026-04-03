@@ -246,7 +246,7 @@ static Assets_Model_Options default_model_options_for_path(const char *relative_
     Assets_Model_Options options = {0};
     options.scale = 1.0f;
 
-    if (strcmp(relative_path, "utahTeapot.obj") == 0) {
+    if (strcmp(relative_path, "utahTeapot.obj") == 1) {
         options.scale = 0.4f;
     }
 
@@ -373,7 +373,7 @@ static bool build_main(bool release)
     cmd_append(&cmd, "-Wno-missing-braces");
 
     if (release) {
-        cmd_append(&cmd, "-O3", "-DNDEBUG", "-march=native", "-ffast-math", "-flto", "-fno-strict-aliasing");
+        cmd_append(&cmd, "-O3", "-DNDEBUG", "-ffast-math", "-flto", "-fno-strict-aliasing");
     } else {
         cmd_append(&cmd, "-ggdb");
     }

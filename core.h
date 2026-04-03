@@ -27,8 +27,23 @@ typedef struct {
     float yaw;
 } Core_Fly_Camera;
 
+typedef enum {
+    CORE_LIGHTING_NONE,
+    CORE_LIGHTING_FLAT,
+    CORE_LIGHTING_GOURAUD,
+} Core_Lighting_Mode;
+
 typedef struct {
     float near_plane;
+    int lighting_enabled;
+    Core_Lighting_Mode lighting_mode;
+    HMM_Vec3 light_direction_world;
+    float ambient_strength;
+    float diffuse_strength;
+    float specular_strength;
+    float shininess;
+    int occlusion_culling;
+    int occlusion_test_step;
     float fog_start;
     float fog_end;
     float fog_power;
@@ -38,6 +53,15 @@ typedef struct {
 
 #define CORE_MESH_DRAW_OPTIONS_DEFAULT ((Core_Mesh_Draw_Options) { \
     .near_plane = 0.1f, \
+    .lighting_enabled = 1, \
+    .lighting_mode = CORE_LIGHTING_GOURAUD, \
+    .light_direction_world = HMM_V3(0.35f, -1.0f, 0.2f), \
+    .ambient_strength = 0.20f, \
+    .diffuse_strength = 0.90f, \
+    .specular_strength = 0.0f, \
+    .shininess = 32.0f, \
+    .occlusion_culling = 1, \
+    .occlusion_test_step = 16, \
     .fog_start = 6.0f, \
     .fog_end = 16.0f, \
     .fog_power = 1.0f, \
