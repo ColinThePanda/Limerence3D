@@ -375,7 +375,7 @@ static bool build_main(bool release)
     if (release) {
         cmd_append(&cmd, "-O3", "-DNDEBUG", "-ffast-math", "-flto", "-fno-strict-aliasing");
     } else {
-        cmd_append(&cmd, "-ggdb");
+        cmd_append(&cmd, "-O1", "-ggdb");
     }
 
     nob_cc_output(&cmd, "main");

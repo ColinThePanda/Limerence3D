@@ -191,7 +191,7 @@ static void draw_test_scene(
 
 int main(void)
 {
-    RGFW_window *win = RGFW_createWindow("Test Scene", 100, 100, 1920, 1080, RGFW_windowCenter | RGFW_windowNoResize);
+    RGFW_window *win = RGFW_createWindow("Test Scene", 100, 100, 980, 540, RGFW_windowCenter | RGFW_windowNoResize);
     u8 *pixels = (u8 *)RGFW_alloc(win->w * win->h * 4);
     float *zbuffer = (float *)malloc(win->w * win->h * sizeof(float));
     RGFW_surface *surface = RGFW_window_createSurface(win, pixels, win->w, win->h, RGFW_formatRGBA8);
@@ -207,7 +207,7 @@ int main(void)
     HMM_Mat4 projection = HMM_Perspective_RH_NO(70.0f, (float)win->w / (float)win->h, NEAR_PLANE, FAR_PLANE);
 
     draw_options.near_plane = NEAR_PLANE;
-    draw_options.light_direction_world = HMM_V3(0.35f, -1.0f, 0.2f);
+    draw_options.light_direction_world = HMM_V3(0.0f, -1.0f, -1.0f);
     draw_options.ambient_strength = 0.15f;
     draw_options.diffuse_strength = 0.85f;
     draw_options.specular_strength = 0.35f;
