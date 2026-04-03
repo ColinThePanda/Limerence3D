@@ -56,10 +56,10 @@ typedef struct {
     .lighting_enabled = 1, \
     .lighting_mode = CORE_LIGHTING_GOURAUD, \
     .light_direction_world = HMM_V3(0.35f, -1.0f, 0.2f), \
-    .ambient_strength = 0.20f, \
-    .diffuse_strength = 0.90f, \
-    .specular_strength = 0.0f, \
-    .shininess = 32.0f, \
+    .ambient_strength = 0.15f, \
+    .diffuse_strength = 0.85f, \
+    .specular_strength = 0.5f, \
+    .shininess = 48.0f, \
     .occlusion_culling = 1, \
     .occlusion_test_step = 16, \
     .fog_start = 6.0f, \

@@ -208,9 +208,10 @@ int main(void)
 
     draw_options.near_plane = NEAR_PLANE;
     draw_options.light_direction_world = HMM_V3(0.35f, -1.0f, 0.2f);
-    draw_options.ambient_strength = 0.20f;
-    draw_options.diffuse_strength = 0.90f;
-    draw_options.specular_strength = 0.0f;
+    draw_options.ambient_strength = 0.15f;
+    draw_options.diffuse_strength = 0.85f;
+    draw_options.specular_strength = 0.35f;
+    draw_options.shininess = 48.0f;
     draw_options.fog_color = BACKGROUND_COLOR;
     draw_options.fog_power = 1.8f;
 
