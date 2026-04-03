@@ -34,6 +34,64 @@ static inline HMM_Vec3 vec3_from_array(const float arr[3]) {
     return HMM_V3(arr[0], arr[1], arr[2]);
 }
 
+static bool near_plane_contains(HMM_Vec3 point)
+{
+    return point.Z <= -NEAR_PLANE;
+}
+
+static HMM_Vec3 intersect_near_plane(HMM_Vec3 a, HMM_Vec3 b)
+{
+    float t = (-NEAR_PLANE - a.Z) / (b.Z - a.Z);
+    return HMM_LerpV3(a, t, b);
+}
+
+static bool same_point(HMM_Vec3 a, HMM_Vec3 b)
+{
+    const float epsilon = 0.00001f;
+    return fabsf(a.X - b.X) < epsilon &&
+           fabsf(a.Y - b.Y) < epsilon &&
+           fabsf(a.Z - b.Z) < epsilon;
+}
+
+static void append_unique_vertex(HMM_Vec3 *vertices, size_t *count, HMM_Vec3 vertex)
+{
+    if (*count > 0 && same_point(vertices[*count - 1], vertex)) {
+        return;
+    }
+
+    vertices[(*count)++] = vertex;
+}
+
+static size_t clip_triangle_against_near_plane(const HMM_Vec3 input[3], HMM_Vec3 output[4])
+{
+    size_t output_count = 0;
+    HMM_Vec3 previous = input[2];
+    bool previous_inside = near_plane_contains(previous);
+
+    for (size_t i = 0; i < 3; i++) {
+        HMM_Vec3 current = input[i];
+        bool current_inside = near_plane_contains(current);
+
+        if (previous_inside && current_inside) {
+            append_unique_vertex(output, &output_count, current);
+        } else if (previous_inside && !current_inside) {
+            append_unique_vertex(output, &output_count, intersect_near_plane(previous, current));
+        } else if (!previous_inside && current_inside) {
+            append_unique_vertex(output, &output_count, intersect_near_plane(previous, current));
+            append_unique_vertex(output, &output_count, current);
+        }
+
+        previous = current;
+        previous_inside = current_inside;
+    }
+
+    if (output_count > 1 && same_point(output[0], output[output_count - 1])) {
+        output_count -= 1;
+    }
+
+    return output_count;
+}
+
 static void write_text(Olivec_Canvas canvas, const Assets_Font *font, const char *text, int x, int y, int scale, uint32_t color) {
     if (font == NULL || text == NULL || scale <= 0) return;
 
@@ -87,14 +145,8 @@ static void write_text(Olivec_Canvas canvas, const Assets_Font *font, const char
 void draw_triangle(
     Olivec_Canvas canvas, float *zbuffer,
     HMM_Vec3 v1_view, HMM_Vec3 v2_view, HMM_Vec3 v3_view,
-    HMM_Mat4 projection, HMM_Mat4 model,
-    HMM_Vec3 vn1, HMM_Vec3 vn2, HMM_Vec3 vn3,
-    int width, int height
+    HMM_Mat4 projection
 ) {
-    (void)model;
-    (void)vn1;
-    (void)vn2;
-    (void)vn3;
     // Backface culling
     HMM_Vec3 edge1 = HMM_SubV3(v2_view, v1_view);
     HMM_Vec3 edge2 = HMM_SubV3(v3_view, v1_view);
@@ -111,13 +163,13 @@ void draw_triangle(
     HMM_Vec3 v3_ndc = HMM_V3(v3_clip.X/v3_clip.W, v3_clip.Y/v3_clip.W, v3_clip.Z/v3_clip.W);
 
     // Screen coords
-    HMM_Vec2 p1 = HMM_V2((v1_ndc.X + 1.0f) * width  * 0.5f, (1.0f - v1_ndc.Y) * height * 0.5f);
-    HMM_Vec2 p2 = HMM_V2((v2_ndc.X + 1.0f) * width  * 0.5f, (1.0f - v2_ndc.Y) * height * 0.5f);
-    HMM_Vec2 p3 = HMM_V2((v3_ndc.X + 1.0f) * width  * 0.5f, (1.0f - v3_ndc.Y) * height * 0.5f);
+    HMM_Vec2 p1 = HMM_V2((v1_ndc.X + 1.0f) * canvas.width  * 0.5f, (1.0f - v1_ndc.Y) * canvas.height * 0.5f);
+    HMM_Vec2 p2 = HMM_V2((v2_ndc.X + 1.0f) * canvas.width  * 0.5f, (1.0f - v2_ndc.Y) * canvas.height * 0.5f);
+    HMM_Vec2 p3 = HMM_V2((v3_ndc.X + 1.0f) * canvas.width  * 0.5f, (1.0f - v3_ndc.Y) * canvas.height * 0.5f);
 
     // Rasterize
     int lx, hx, ly, hy;
-    if (olivec_normalize_triangle(width, height, (int)p1.X, (int)p1.Y, (int)p2.X, (int)p2.Y, (int)p3.X, (int)p3.Y, &lx, &hx, &ly, &hy)) {
+    if (olivec_normalize_triangle((int)canvas.width, (int)canvas.height, (int)p1.X, (int)p1.Y, (int)p2.X, (int)p2.Y, (int)p3.X, (int)p3.Y, &lx, &hx, &ly, &hy)) {
         for (int y = ly; y <= hy; ++y) {
             for (int x = lx; x <= hx; ++x) {
                 int u1, u2, det;
@@ -141,53 +193,22 @@ void draw_triangle(
     }
 }
 
-void draw_model(Olivec_Canvas canvas, float *zbuffer, HMM_Mat4 model, HMM_Mat4 view, HMM_Mat4 projection, HMM_Vec3 camera) {
-    (void)camera;
+void draw_model(Olivec_Canvas canvas, float *zbuffer, HMM_Mat4 model, HMM_Mat4 view, HMM_Mat4 projection) {
     HMM_Mat4 mv  = HMM_MulM4(view, model);
     const Assets_Model *asset = &assets_model_utah_teapot;
 
-    for (size_t i = 0; i < asset->face_count; ++i) {
+    for (size_t i = 0; i < asset->face_count; i++) {
         const int *face = asset->faces[i];
-        HMM_Vec3 v1_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V1]]), 1.0f)).XYZ;
-        HMM_Vec3 v2_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V2]]), 1.0f)).XYZ;
-        HMM_Vec3 v3_view = HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V3]]), 1.0f)).XYZ;
+        HMM_Vec3 triangle[3] = {
+            HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V1]]), 1.0f)).XYZ,
+            HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V2]]), 1.0f)).XYZ,
+            HMM_MulM4V4(mv, HMM_V4V(vec3_from_array(asset->vertices[face[ASSETS_FACE_V3]]), 1.0f)).XYZ,
+        };
+        HMM_Vec3 clipped[4];
+        size_t clipped_count = clip_triangle_against_near_plane(triangle, clipped);
 
-        HMM_Vec3 vn1 = face[ASSETS_FACE_VN1] >= 0 ? HMM_MulM4V4(model, HMM_V4V(vec3_from_array(asset->normals[face[ASSETS_FACE_VN1]]), 0.0f)).XYZ : HMM_V3(0, 0, 0);
-        HMM_Vec3 vn2 = face[ASSETS_FACE_VN2] >= 0 ? HMM_MulM4V4(model, HMM_V4V(vec3_from_array(asset->normals[face[ASSETS_FACE_VN2]]), 0.0f)).XYZ : HMM_V3(0, 0, 0);
-        HMM_Vec3 vn3 = face[ASSETS_FACE_VN3] >= 0 ? HMM_MulM4V4(model, HMM_V4V(vec3_from_array(asset->normals[face[ASSETS_FACE_VN3]]), 0.0f)).XYZ : HMM_V3(0, 0, 0);
-
-        HMM_Vec3 clipped[3], unclipped[3];
-        int cc = 0, uc = 0;
-        if (v1_view.Z > -NEAR_PLANE) clipped[cc++] = v1_view; else unclipped[uc++] = v1_view;
-        if (v2_view.Z > -NEAR_PLANE) clipped[cc++] = v2_view; else unclipped[uc++] = v2_view;
-        if (v3_view.Z > -NEAR_PLANE) clipped[cc++] = v3_view; else unclipped[uc++] = v3_view;
-
-        switch (cc) {
-            case 0:
-                draw_triangle(canvas, zbuffer, v1_view, v2_view, v3_view, projection, model, vn1, vn2, vn3, canvas.width, canvas.height);
-                break;
-            case 1: {
-                // 1 vertex clipped, 2 visible -> interpolate 2 new verts, make 2 triangles
-                HMM_Vec3 a = unclipped[0], b = unclipped[1], c = clipped[0];
-                float tA = (-NEAR_PLANE - a.Z) / (c.Z - a.Z);
-                float tB = (-NEAR_PLANE - b.Z) / (c.Z - b.Z);
-                HMM_Vec3 newA = HMM_LerpV3(a, tA, c);
-                HMM_Vec3 newB = HMM_LerpV3(b, tB, c);
-                draw_triangle(canvas, zbuffer, a,    b, newA, projection, model, vn1, vn2, vn3, canvas.width, canvas.height);
-                draw_triangle(canvas, zbuffer, newA, b, newB, projection, model, vn1, vn2, vn3, canvas.width, canvas.height);
-                break;
-            }
-            case 2: {
-                // 2 vertices clipped, 1 visible -> interpolate 2 new verts, make 1 triangle
-                HMM_Vec3 a = unclipped[0], b = clipped[0], c = clipped[1];
-                float tB = (-NEAR_PLANE - a.Z) / (b.Z - a.Z);
-                float tC = (-NEAR_PLANE - a.Z) / (c.Z - a.Z);
-                HMM_Vec3 newB = HMM_LerpV3(a, tB, b);
-                HMM_Vec3 newC = HMM_LerpV3(a, tC, c);
-                draw_triangle(canvas, zbuffer, a, newB, newC, projection, model, vn1, vn2, vn3, canvas.width, canvas.height);
-                break;
-            }
-            case 3: continue; // fully clipped do not draw
+        for (size_t j = 1; j + 1 < clipped_count; ++j) {
+            draw_triangle(canvas, zbuffer, clipped[0], clipped[j], clipped[j + 1], projection);
         }
     }
 }
@@ -249,13 +270,13 @@ int main(void) {
         last_frame = current_time;
 
         olivec_fill(canvas, BACKGROUND_COLOR);
-        for (size_t i = 0; i < (size_t)(win->w * win->h); ++i) zbuffer[i] = 1.0f;
+        for (size_t i = 0; i < (size_t)(win->w * win->h); i++) zbuffer[i] = 1.0f;
 
         camera_yaw   -= mouse_dx * SENSITIVITY;
         camera_pitch += mouse_dy * SENSITIVITY;
 
-        if (camera_pitch > 90.0f) camera_pitch = 90.0f;
-        if (camera_pitch < -90.0f) camera_pitch = -90.0f;
+        if (camera_pitch > 89.9f) camera_pitch = 89.9f;
+        if (camera_pitch < -89.9f) camera_pitch = -89.9f;
 
         HMM_Vec3 forward = {
             HMM_CosF(camera_pitch) * HMM_SinF(camera_yaw),
@@ -283,7 +304,7 @@ int main(void) {
         view = HMM_LookAt_RH(camera_pos, center, HMM_V3(0, 1, 0));
 
         HMM_Mat4 model = HMM_Rotate_RH(angle, HMM_V3(0, 1, 0));
-        draw_model(canvas, zbuffer, model, view, projection, HMM_V3(0, 0, 1));
+        draw_model(canvas, zbuffer, model, view, projection);
 
         char buffer[256];
         snprintf(buffer, sizeof(buffer), "fps: %d", (int)(1.0f / dt));

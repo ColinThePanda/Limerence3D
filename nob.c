@@ -1,3 +1,7 @@
+#if defined(_WIN32) && defined(__GNUC__)
+#define nob_cc(cmd) nob_cmd_append((cmd), "gcc")
+#endif
+
 #define NOB_IMPLEMENTATION
 #define NOB_STRIP_PREFIX
 #include "third_party/nob.h"
