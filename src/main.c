@@ -18,7 +18,11 @@
 #include "assets_runtime.h"
 #include "core.h"
 #include "lua_api.h"
+#include "third_party/lua-5.5.0/src/lauxlib.h"
+#include "third_party/lua-5.5.0/src/lualib.h"
 
+#define DEFAULT_WINDOW_X 100
+#define DEFAULT_WINDOW_Y 100
 #define DEFAULT_WINDOW_WIDTH 980
 #define DEFAULT_WINDOW_HEIGHT 540
 #define DEFAULT_BACKGROUND_COLOR 0xFF181818
@@ -27,6 +31,20 @@ typedef struct {
     const char *assets_root;
     Nob_File_Paths *inputs;
 } Pack_Input_Context;
+
+typedef struct {
+    char *title;
+    int x;
+    int y;
+    int width;
+    int height;
+    bool centered;
+    bool resizable;
+    bool borderless;
+    bool fullscreen;
+    bool hidden;
+    bool focus_on_show;
+} Project_Window_Config;
 
 static const char *starter_main_lua =
     "local bg = graphics.rgba(24, 24, 24, 255)\n"
@@ -57,6 +75,53 @@ static const char *project_luarc_json =
     "  }\n"
     "}\n";
 
+static void append_lua_string_literal(Nob_String_Builder *sb, const char *value)
+{
+    nob_sb_append_cstr(sb, "\"");
+    for (size_t i = 0; value != NULL && value[i] != '\0'; ++i) {
+        char ch = value[i];
+
+        switch (ch) {
+        case '\\':
+            nob_sb_append_cstr(sb, "\\\\");
+            break;
+        case '"':
+            nob_sb_append_cstr(sb, "\\\"");
+            break;
+        case '\n':
+            nob_sb_append_cstr(sb, "\\n");
+            break;
+        case '\r':
+            nob_sb_append_cstr(sb, "\\r");
+            break;
+        case '\t':
+            nob_sb_append_cstr(sb, "\\t");
+            break;
+        default:
+            nob_sb_append_buf(sb, &ch, 1);
+            break;
+        }
+    }
+    nob_sb_append_cstr(sb, "\"");
+}
+
+static bool build_default_project_conf(Nob_String_Builder *sb, const char *title)
+{
+    nob_sb_append_cstr(sb, "return {\n");
+    nob_sb_append_cstr(sb, "  window = {\n");
+    nob_sb_append_cstr(sb, "    title = ");
+    append_lua_string_literal(sb, title);
+    nob_sb_append_cstr(sb, ",\n");
+    nob_sb_appendf(sb, "    width = %d,\n", DEFAULT_WINDOW_WIDTH);
+    nob_sb_appendf(sb, "    height = %d,\n", DEFAULT_WINDOW_HEIGHT);
+    nob_sb_append_cstr(sb, "    resizable = false,\n");
+    nob_sb_append_cstr(sb, "    centered = true,\n");
+    nob_sb_append_cstr(sb, "  },\n");
+    nob_sb_append_cstr(sb, "}\n");
+    nob_sb_append_null(sb);
+    return true;
+}
+
 static void log_assets_error(const Assets_Error *error)
 {
     if (error->source_path[0] != '\0' && error->line > 0) {
@@ -82,6 +147,8 @@ static char *copy_string(const char *src)
     memcpy(result, src, count + 1);
     return result;
 }
+
+static const char *path_join(const char *lhs, const char *rhs);
 
 static bool is_path_sep(char ch)
 {
@@ -166,6 +233,140 @@ static bool write_new_file(const char *path, const char *contents)
     }
 
     return true;
+}
+
+static void project_window_config_init(Project_Window_Config *config, const char *default_title)
+{
+    memset(config, 0, sizeof(*config));
+    config->title = copy_string(default_title != NULL ? default_title : "Limerence3D");
+    config->x = DEFAULT_WINDOW_X;
+    config->y = DEFAULT_WINDOW_Y;
+    config->width = DEFAULT_WINDOW_WIDTH;
+    config->height = DEFAULT_WINDOW_HEIGHT;
+    config->centered = true;
+}
+
+static void project_window_config_free(Project_Window_Config *config)
+{
+    free(config->title);
+    memset(config, 0, sizeof(*config));
+}
+
+static void lua_read_optional_string_field(lua_State *L, int index, const char *field_name, char **dst)
+{
+    int absolute_index = lua_absindex(L, index);
+
+    lua_getfield(L, absolute_index, field_name);
+    if (lua_isstring(L, -1)) {
+        char *value = copy_string(lua_tostring(L, -1));
+
+        if (value != NULL) {
+            free(*dst);
+            *dst = value;
+        }
+    }
+    lua_pop(L, 1);
+}
+
+static void lua_read_optional_int_field(lua_State *L, int index, const char *field_name, int *dst)
+{
+    int absolute_index = lua_absindex(L, index);
+
+    lua_getfield(L, absolute_index, field_name);
+    if (lua_isinteger(L, -1)) {
+        *dst = (int)lua_tointeger(L, -1);
+    }
+    lua_pop(L, 1);
+}
+
+static void lua_read_optional_bool_field(lua_State *L, int index, const char *field_name, bool *dst)
+{
+    int absolute_index = lua_absindex(L, index);
+
+    lua_getfield(L, absolute_index, field_name);
+    if (!lua_isnil(L, -1)) {
+        *dst = lua_toboolean(L, -1) ? true : false;
+    }
+    lua_pop(L, 1);
+}
+
+static void project_window_config_apply_table(lua_State *L, int index, Project_Window_Config *config)
+{
+    int absolute_index = lua_absindex(L, index);
+
+    lua_getfield(L, absolute_index, "window");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        return;
+    }
+
+    lua_read_optional_string_field(L, -1, "title", &config->title);
+    lua_read_optional_int_field(L, -1, "x", &config->x);
+    lua_read_optional_int_field(L, -1, "y", &config->y);
+    lua_read_optional_int_field(L, -1, "width", &config->width);
+    lua_read_optional_int_field(L, -1, "height", &config->height);
+    lua_read_optional_bool_field(L, -1, "centered", &config->centered);
+    lua_read_optional_bool_field(L, -1, "resizable", &config->resizable);
+    lua_read_optional_bool_field(L, -1, "borderless", &config->borderless);
+    lua_read_optional_bool_field(L, -1, "fullscreen", &config->fullscreen);
+    lua_read_optional_bool_field(L, -1, "hidden", &config->hidden);
+    lua_read_optional_bool_field(L, -1, "focus_on_show", &config->focus_on_show);
+    lua_pop(L, 1);
+}
+
+static bool load_project_window_config(const char *project_root, Project_Window_Config *config)
+{
+    bool result = true;
+    lua_State *L = NULL;
+    char *config_path = copy_string(path_join(project_root, "conf.lua"));
+
+    if (config_path == NULL) {
+        return false;
+    }
+    if (!file_exists(config_path)) {
+        goto defer;
+    }
+
+    L = luaL_newstate();
+    if (L == NULL) {
+        fputs("failed to create Lua state for conf.lua\n", stderr);
+        nob_return_defer(false);
+    }
+
+    luaL_openlibs(L);
+    if (luaL_loadfilex(L, config_path, NULL) != LUA_OK) {
+        fprintf(stderr, "%s: %s\n", config_path, lua_tostring(L, -1));
+        nob_return_defer(false);
+    }
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+        fprintf(stderr, "%s: %s\n", config_path, lua_tostring(L, -1));
+        nob_return_defer(false);
+    }
+    if (!lua_istable(L, -1)) {
+        fprintf(stderr, "%s: conf.lua must return a table\n", config_path);
+        nob_return_defer(false);
+    }
+
+    project_window_config_apply_table(L, -1, config);
+
+defer:
+    if (L != NULL) lua_close(L);
+    free(config_path);
+    return result;
+}
+
+static RGFW_windowFlags project_window_config_flags(const Project_Window_Config *config)
+{
+    RGFW_windowFlags flags = 0;
+
+    if (!config->resizable) flags |= RGFW_windowNoResize;
+    if (config->borderless) flags |= RGFW_windowNoBorder;
+    if (config->fullscreen) flags |= RGFW_windowFullscreen;
+    if (config->centered) flags |= RGFW_windowCenter;
+    if (config->hidden) flags |= RGFW_windowHide;
+    if (config->focus_on_show) flags |= RGFW_windowFocusOnShow;
+
+    return flags;
 }
 
 static bool path_is_absolute(const char *path)
@@ -324,16 +525,24 @@ defer:
 static bool create_new_project(const char *repo_root, const char *project_root)
 {
     char *assets_root = copy_string(path_join(project_root, "assets"));
+    char *conf_lua_path = copy_string(path_join(project_root, "conf.lua"));
     char *main_lua_path = copy_string(path_join(project_root, "main.lua"));
+    Nob_String_Builder conf = {0};
     bool result = true;
 
-    if (assets_root == NULL || main_lua_path == NULL) {
+    if (assets_root == NULL || conf_lua_path == NULL || main_lua_path == NULL) {
         nob_return_defer(false);
     }
     if (!ensure_directory_tree(project_root)) {
         nob_return_defer(false);
     }
     if (!mkdir_if_not_exists(assets_root)) {
+        nob_return_defer(false);
+    }
+    if (!build_default_project_conf(&conf, path_name(project_root))) {
+        nob_return_defer(false);
+    }
+    if (!write_new_file(conf_lua_path, conf.items)) {
         nob_return_defer(false);
     }
     if (!write_new_file(main_lua_path, starter_main_lua)) {
@@ -348,7 +557,9 @@ static bool create_new_project(const char *repo_root, const char *project_root)
 defer:
     (void)repo_root;
     free(assets_root);
+    free(conf_lua_path);
     free(main_lua_path);
+    free(conf.items);
     return result;
 }
 
@@ -452,7 +663,6 @@ static bool run_project(const char *repo_root, const char *project_root)
 {
     bool result = false;
     char *bootstrap_path = copy_string(path_join(repo_root, "lua_api.lua"));
-    const char *window_title = path_name(project_root);
     const char *pack_path = NULL;
     RGFW_window *win = NULL;
     u8 *pixels = NULL;
@@ -462,9 +672,14 @@ static bool run_project(const char *repo_root, const char *project_root)
     Assets_Runtime_Registry assets = {0};
     Lua_API_Context lua_context = {0};
     uint64_t last_frame = 0;
+    Project_Window_Config window_config = {0};
 
+    project_window_config_init(&window_config, path_name(project_root));
+    if (!load_project_window_config(project_root, &window_config)) {
+        goto defer;
+    }
     if (!build_project_pack_if_needed(project_root, repo_root, &pack_path)) {
-        return false;
+        goto defer;
     }
 
     if (pack_path != NULL) {
@@ -481,12 +696,12 @@ static bool run_project(const char *repo_root, const char *project_root)
     }
 
     win = RGFW_createWindow(
-        window_title[0] != '\0' ? window_title : "Limerence3D",
-        100,
-        100,
-        DEFAULT_WINDOW_WIDTH,
-        DEFAULT_WINDOW_HEIGHT,
-        RGFW_windowCenter | RGFW_windowNoResize
+        window_config.title != NULL && window_config.title[0] != '\0' ? window_config.title : "Limerence3D",
+        window_config.x,
+        window_config.y,
+        window_config.width,
+        window_config.height,
+        project_window_config_flags(&window_config)
     );
     if (win == NULL) {
         fputs("failed to create window\n", stderr);
@@ -574,6 +789,7 @@ defer:
     assets_runtime_unload(&assets);
     free((void *)pack_path);
     free(bootstrap_path);
+    project_window_config_free(&window_config);
     if (surface != NULL) RGFW_surface_free(surface);
     if (pixels != NULL) RGFW_free(pixels);
     free(zbuffer);
