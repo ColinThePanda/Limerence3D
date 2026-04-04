@@ -13,10 +13,6 @@
 #define LUA_API_MAX_SOUNDS 64
 #define LUA_API_CAMERA_METATABLE "limerence.camera"
 
-extern const Assets_Model assets_model_cube;
-extern const Assets_Model assets_model_utah_teapot;
-extern const Assets_Font assets_font_iosevka_regular;
-
 typedef struct {
     bool active;
     ma_sound sound;
@@ -191,35 +187,32 @@ static float *lua_api_require_zbuffer(lua_State *L)
     return g_lua_api.context.zbuffer;
 }
 
+static const Assets_Runtime_Registry *lua_api_require_assets(lua_State *L)
+{
+    if (g_lua_api.context.assets == NULL) {
+        luaL_error(L, "asset registry is not available");
+    }
+
+    return g_lua_api.context.assets;
+}
+
 static const Assets_Model *lua_api_find_model(const char *name)
 {
-    if (strcmp(name, "cube") == 0 || strcmp(name, "assets_model_cube") == 0) {
-        return &assets_model_cube;
-    }
-
-    if (strcmp(name, "utah_teapot") == 0 ||
-        strcmp(name, "teapot") == 0 ||
-        strcmp(name, "assets_model_utah_teapot") == 0) {
-        return &assets_model_utah_teapot;
-    }
-
-    return NULL;
+    return assets_runtime_find_model(g_lua_api.context.assets, name);
 }
 
 static const Assets_Font *lua_api_find_font(const char *name)
 {
-    if (strcmp(name, "iosevka_regular") == 0 ||
-        strcmp(name, "assets_font_iosevka_regular") == 0) {
-        return &assets_font_iosevka_regular;
-    }
-
-    return NULL;
+    return assets_runtime_find_font(g_lua_api.context.assets, name);
 }
 
 static const Assets_Model *lua_api_check_model(lua_State *L, int index)
 {
     const char *name = luaL_checkstring(L, index);
-    const Assets_Model *model = lua_api_find_model(name);
+    const Assets_Model *model;
+
+    lua_api_require_assets(L);
+    model = lua_api_find_model(name);
 
     if (model == NULL) {
         luaL_error(L, "unknown model '%s'", name);
@@ -231,7 +224,10 @@ static const Assets_Model *lua_api_check_model(lua_State *L, int index)
 static const Assets_Font *lua_api_check_font(lua_State *L, int index)
 {
     const char *name = luaL_checkstring(L, index);
-    const Assets_Font *font = lua_api_find_font(name);
+    const Assets_Font *font;
+
+    lua_api_require_assets(L);
+    font = lua_api_find_font(name);
 
     if (font == NULL) {
         luaL_error(L, "unknown font '%s'", name);
@@ -432,6 +428,17 @@ static int lua_api_rgfw_show_mouse(lua_State *L)
 {
     RGFW_window_showMouse(lua_api_require_window(L), lua_toboolean(L, 1) ? 1 : 0);
     return 0;
+}
+
+static int lua_api_rgfw_get_mouse_vector(lua_State *L)
+{
+    float x = 0.0f;
+    float y = 0.0f;
+
+    (void)lua_api_require_window(L);
+    RGFW_getMouseVector(&x, &y);
+    lua_api_push_vec2(L, HMM_V2(x, y));
+    return 1;
 }
 
 static int lua_api_rgfw_hold_mouse(lua_State *L)
@@ -1145,6 +1152,14 @@ static void lua_api_set_constants(lua_State *L)
 {
     lua_pushinteger(L, RGFW_escape);
     lua_setfield(L, -2, "key_escape");
+    lua_pushinteger(L, RGFW_up);
+    lua_setfield(L, -2, "key_up");
+    lua_pushinteger(L, RGFW_down);
+    lua_setfield(L, -2, "key_down");
+    lua_pushinteger(L, RGFW_left);
+    lua_setfield(L, -2, "key_left");
+    lua_pushinteger(L, RGFW_right);
+    lua_setfield(L, -2, "key_right");
     lua_pushinteger(L, RGFW_w);
     lua_setfield(L, -2, "key_w");
     lua_pushinteger(L, RGFW_a);
@@ -1153,6 +1168,10 @@ static void lua_api_set_constants(lua_State *L)
     lua_setfield(L, -2, "key_s");
     lua_pushinteger(L, RGFW_d);
     lua_setfield(L, -2, "key_d");
+    lua_pushinteger(L, RGFW_q);
+    lua_setfield(L, -2, "key_q");
+    lua_pushinteger(L, RGFW_e);
+    lua_setfield(L, -2, "key_e");
     lua_pushinteger(L, RGFW_space);
     lua_setfield(L, -2, "key_space");
     lua_pushinteger(L, RGFW_shiftL);
@@ -1186,6 +1205,7 @@ bool lua_api_init(const Lua_API_Context *context)
         {"close", lua_api_rgfw_close},
         {"set_exit_key", lua_api_rgfw_set_exit_key},
         {"show_mouse", lua_api_rgfw_show_mouse},
+        {"get_mouse_vector", lua_api_rgfw_get_mouse_vector},
         {"hold_mouse", lua_api_rgfw_hold_mouse},
         {"unhold_mouse", lua_api_rgfw_unhold_mouse},
         {"is_key_pressed", lua_api_rgfw_is_key_pressed},
@@ -1323,16 +1343,8 @@ void lua_api_shutdown(void)
     memset(&g_lua_api.context, 0, sizeof(g_lua_api.context));
 }
 
-bool lua_api_run_string(const char *chunk)
+static bool lua_api_report_call_status(int status)
 {
-    int status;
-
-    if (g_lua_api.state == NULL) {
-        fputs("lua_api_run_string: Lua state is not initialized\n", stderr);
-        return false;
-    }
-
-    status = luaL_dostring(g_lua_api.state, chunk);
     if (status != LUA_OK) {
         fprintf(stderr, "lua error: %s\n", lua_tostring(g_lua_api.state, -1));
         lua_pop(g_lua_api.state, 1);
@@ -1340,4 +1352,75 @@ bool lua_api_run_string(const char *chunk)
     }
 
     return true;
+}
+
+bool lua_api_run_file(const char *path)
+{
+    if (g_lua_api.state == NULL) {
+        fputs("lua_api_run_file: Lua state is not initialized\n", stderr);
+        return false;
+    }
+
+    return lua_api_report_call_status(luaL_dofile(g_lua_api.state, path));
+}
+
+bool lua_api_run_string(const char *chunk)
+{
+    if (g_lua_api.state == NULL) {
+        fputs("lua_api_run_string: Lua state is not initialized\n", stderr);
+        return false;
+    }
+
+    return lua_api_report_call_status(luaL_dostring(g_lua_api.state, chunk));
+}
+
+bool lua_api_call_global0(const char *name)
+{
+    int status;
+
+    if (g_lua_api.state == NULL) {
+        fputs("lua_api_call_global0: Lua state is not initialized\n", stderr);
+        return false;
+    }
+
+    lua_getglobal(g_lua_api.state, name);
+    if (lua_isnil(g_lua_api.state, -1)) {
+        lua_pop(g_lua_api.state, 1);
+        return true;
+    }
+
+    if (!lua_isfunction(g_lua_api.state, -1)) {
+        fprintf(stderr, "lua error: global '%s' is not a function\n", name);
+        lua_pop(g_lua_api.state, 1);
+        return false;
+    }
+
+    status = lua_pcall(g_lua_api.state, 0, 0, 0);
+    return lua_api_report_call_status(status);
+}
+
+bool lua_api_call_global1_number(const char *name, double value)
+{
+    int status;
+
+    if (g_lua_api.state == NULL) {
+        fputs("lua_api_call_global1_number: Lua state is not initialized\n", stderr);
+        return false;
+    }
+
+    lua_getglobal(g_lua_api.state, name);
+    if (lua_isnil(g_lua_api.state, -1)) {
+        lua_pop(g_lua_api.state, 1);
+        return true;
+    }
+
+    if (!lua_isfunction(g_lua_api.state, -1)) {
+        fprintf(stderr, "lua error: global '%s' is not a function\n", name);
+        lua_pop(g_lua_api.state, 1);
+        return false;
+    }
+
+    lua_pushnumber(g_lua_api.state, value);
+    status = lua_pcall(g_lua_api.state, 1, 0, 0);
+    return lua_api_report_call_status(status);
 }

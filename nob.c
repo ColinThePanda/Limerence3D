@@ -413,8 +413,8 @@ static bool build_main(bool release)
         cmd_append(&cmd, "-O1", "-ggdb");
     }
 
-    nob_cc_output(&cmd, "main");
-    nob_cc_inputs(&cmd, "main.c", "core.c", "lua_api.c");
+    nob_cc_output(&cmd, "limerence");
+    nob_cc_inputs(&cmd, "main.c", "core.c", "lua_api.c", "assets_runtime.c");
     for (size_t i = 0; i < NOB_ARRAY_LEN(lua_sources); ++i) {
         cmd_append(&cmd, lua_sources[i]);
     }
@@ -429,6 +429,8 @@ int main(int argc, char **argv)
         argv,
         "main.c",
         "assets.h",
+        "assets_runtime.c",
+        "assets_runtime.h",
         "lua_api.c",
         "lua_api.h",
         "third_party/nob.h",
@@ -460,7 +462,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!convert_assets()) return 1;
     if (!build_main(release)) return 1;
 
     if (run) {
