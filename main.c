@@ -701,16 +701,24 @@ static bool run_project(const char *repo_root, const char *project_root)
         RGFW_event event;
         uint64_t now;
         float dt;
+        float mouse_delta_x = 0.0f;
+        float mouse_delta_y = 0.0f;
 
         while (RGFW_window_checkEvent(win, &event)) {
             if (event.type == RGFW_quit) {
                 break;
+            }
+
+            if (event.type == RGFW_mousePosChanged) {
+                mouse_delta_x += event.mouse.vecX;
+                mouse_delta_y += event.mouse.vecY;
             }
         }
 
         now = nanos_since_unspecified_epoch();
         dt = (float)(now - last_frame) / (float)NANOS_PER_SEC;
         last_frame = now;
+        lua_api_set_mouse_vector(mouse_delta_x, mouse_delta_y);
 
         if (!lua_api_call_global1_number("update", dt)) {
             goto defer;

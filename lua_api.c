@@ -25,6 +25,8 @@ typedef struct {
 typedef struct {
     lua_State *state;
     Lua_API_Context context;
+    float mouse_vector_x;
+    float mouse_vector_y;
     bool audio_ready;
     ma_engine audio_engine;
     Lua_API_Sound sounds[LUA_API_MAX_SOUNDS];
@@ -432,12 +434,8 @@ static int lua_api_rgfw_show_mouse(lua_State *L)
 
 static int lua_api_rgfw_get_mouse_vector(lua_State *L)
 {
-    float x = 0.0f;
-    float y = 0.0f;
-
     (void)lua_api_require_window(L);
-    RGFW_getMouseVector(&x, &y);
-    lua_api_push_vec2(L, HMM_V2(x, y));
+    lua_api_push_vec2(L, HMM_V2(g_lua_api.mouse_vector_x, g_lua_api.mouse_vector_y));
     return 1;
 }
 
@@ -1304,6 +1302,8 @@ bool lua_api_init(const Lua_API_Context *context)
 
     lua_api_shutdown();
     g_lua_api.context = *context;
+    g_lua_api.mouse_vector_x = 0.0f;
+    g_lua_api.mouse_vector_y = 0.0f;
     g_lua_api.state = luaL_newstate();
     if (g_lua_api.state == NULL) {
         fputs("failed to create Lua state\n", stderr);
@@ -1318,10 +1318,10 @@ bool lua_api_init(const Lua_API_Context *context)
     lua_pop(g_lua_api.state, 1);
     lua_pushcfunction(g_lua_api.state, lua_api_hello_world);
     lua_setglobal(g_lua_api.state, "hello_world");
-    lua_api_register_module(g_lua_api.state, "rgfw", rgfw_functions);
+    lua_api_register_module(g_lua_api.state, "window", rgfw_functions);
     lua_api_register_module(g_lua_api.state, "graphics", graphics_functions);
     lua_api_register_module(g_lua_api.state, "core", core_functions);
-    lua_api_register_module(g_lua_api.state, "hmm", hmm_functions);
+    lua_api_register_module(g_lua_api.state, "math", hmm_functions);
     lua_api_register_module(g_lua_api.state, "audio", audio_functions);
 
     return true;
@@ -1341,6 +1341,14 @@ void lua_api_shutdown(void)
     }
 
     memset(&g_lua_api.context, 0, sizeof(g_lua_api.context));
+    g_lua_api.mouse_vector_x = 0.0f;
+    g_lua_api.mouse_vector_y = 0.0f;
+}
+
+void lua_api_set_mouse_vector(float x, float y)
+{
+    g_lua_api.mouse_vector_x = x;
+    g_lua_api.mouse_vector_y = y;
 }
 
 static bool lua_api_report_call_status(int status)

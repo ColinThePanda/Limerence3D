@@ -1,0 +1,14 @@
+{
+  "workspace": {
+    "library": [
+      "./.limerence/meta"
+    ],
+    "checkThirdParty": false
+  },
+  "completion": {
+    "callSnippet": "Both"
+  },
+  "hint": {
+    "enable": true
+  }
+}

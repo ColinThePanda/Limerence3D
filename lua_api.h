@@ -21,5 +21,6 @@ bool lua_api_run_file(const char *path);
 bool lua_api_run_string(const char *chunk);
 bool lua_api_call_global0(const char *name);
 bool lua_api_call_global1_number(const char *name, double value);
+void lua_api_set_mouse_vector(float x, float y);
 
 #endif
