@@ -41,8 +41,6 @@ typedef struct {
     bool resizable;
     bool borderless;
     bool fullscreen;
-    bool hidden;
-    bool focus_on_show;
 } Project_Window_Config;
 
 static const char *starter_main_lua =
@@ -308,8 +306,6 @@ static void project_window_config_apply_table(lua_State *L, int index, Project_W
     lua_read_optional_bool_field(L, -1, "resizable", &config->resizable);
     lua_read_optional_bool_field(L, -1, "borderless", &config->borderless);
     lua_read_optional_bool_field(L, -1, "fullscreen", &config->fullscreen);
-    lua_read_optional_bool_field(L, -1, "hidden", &config->hidden);
-    lua_read_optional_bool_field(L, -1, "focus_on_show", &config->focus_on_show);
     lua_pop(L, 1);
 }
 
@@ -354,16 +350,49 @@ defer:
     return result;
 }
 
+static bool project_window_config_is_borderless_fullscreen(const Project_Window_Config *config)
+{
+    return config->borderless && config->fullscreen;
+}
+
+static void project_window_apply_borderless_fullscreen(RGFW_window *win)
+{
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+
+#ifdef _WIN32
+    x = 0;
+    y = 0;
+    width = GetSystemMetrics(SM_CXSCREEN);
+    height = GetSystemMetrics(SM_CYSCREEN);
+#else
+    RGFW_monitor monitor = RGFW_getPrimaryMonitor();
+
+    x = monitor.x;
+    y = monitor.y;
+    width = monitor.mode.w;
+    height = monitor.mode.h;
+#endif
+
+    RGFW_window_move(win, x, y);
+    RGFW_window_resize(win, width, height);
+}
+
 static RGFW_windowFlags project_window_config_flags(const Project_Window_Config *config)
 {
     RGFW_windowFlags flags = 0;
 
     if (!config->resizable) flags |= RGFW_windowNoResize;
+    if (project_window_config_is_borderless_fullscreen(config)) {
+        flags |= RGFW_windowNoBorder;
+        return flags;
+    }
+
     if (config->borderless) flags |= RGFW_windowNoBorder;
     if (config->fullscreen) flags |= RGFW_windowFullscreen;
     if (config->centered) flags |= RGFW_windowCenter;
-    if (config->hidden) flags |= RGFW_windowHide;
-    if (config->focus_on_show) flags |= RGFW_windowFocusOnShow;
 
     return flags;
 }
@@ -705,6 +734,9 @@ static bool run_project(const char *repo_root, const char *project_root)
     if (win == NULL) {
         fputs("failed to create window\n", stderr);
         goto defer;
+    }
+    if (project_window_config_is_borderless_fullscreen(&window_config)) {
+        project_window_apply_borderless_fullscreen(win);
     }
 
     pixels = (u8 *)RGFW_alloc(win->w * win->h * 4);

@@ -197,7 +197,7 @@ function update(dt)
         window.close()
     end
 
-    if window.is_mouse_pressed(window.mouse_left) and mouse_mode == MOUSE_NORMAL then
+    if window.is_mouse_pressed(window.mouse_left) then
         set_mouse_mode(MOUSE_DISABLED)
     end
 
