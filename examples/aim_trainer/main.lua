@@ -10,9 +10,8 @@ local MOUSE_DISABLED = 2
 
 local BACKGROUND_COLOR = 0xFF181818
 local FLOOR_COLOR = 0xFF3A4248
-local WALL_COLOR = 0xFF242F37
 local PLATFORM_COLOR = 0xFF56697A
-local TARGET_COLOR = 0xFFD95050
+local TARGET_COLOR = 0xFF1E2CE8
 local TEXT_COLOR = 0xFFFFFFFF
 local CROSSHAIR_COLOR = 0xFFFFFFFF
 
@@ -38,12 +37,7 @@ local spawn_points = {
 }
 
 local arena_blocks = {
-    {asset = "cube", position = math.vec3(0.0, -1.3, -4.5), scale = math.vec3(14.0, 0.4, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = FLOOR_COLOR},
-    {asset = "cube", position = math.vec3(0.0, 2.5, -16.6), scale = math.vec3(14.0, 7.2, 0.4), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = math.vec3(0.0, 2.5, 7.8), scale = math.vec3(14.0, 7.2, 0.4), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = math.vec3(-7.2, 2.5, -4.5), scale = math.vec3(0.4, 7.2, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = math.vec3(7.2, 2.5, -4.5), scale = math.vec3(0.4, 7.2, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = math.vec3(0.0, 6.0, -4.5), scale = math.vec3(14.0, 0.35, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
+    {asset = "cube", position = math.vec3(0.0, -1.3, -4.5), scale = math.vec3(14.0, 0.4, 16.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = FLOOR_COLOR},
     {asset = "cube", position = math.vec3(0.0, 0.4, -8.2), scale = math.vec3(2.4, 0.25, 1.2), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
     {asset = "cube", position = math.vec3(-4.3, 1.8, -11.8), scale = math.vec3(1.8, 0.25, 1.2), rotation = 15.0, axis = math.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
     {asset = "cube", position = math.vec3(4.3, 1.8, -11.8), scale = math.vec3(1.8, 0.25, 1.2), rotation = -15.0, axis = math.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},

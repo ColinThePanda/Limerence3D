@@ -4,7 +4,6 @@
 #include <string.h>
 
 #define RGFW_IMPLEMENTATION
-#define RGFW_DEBUG
 #include "third_party/RGFW.h"
 
 #ifdef ERROR

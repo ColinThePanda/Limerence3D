@@ -1,6 +1,6 @@
 return {
   window = {
-    title = "Aim Trainer",
+    title = "Basic Scene",
     width = 1920,
     height = 1080,
     resizable = false,

@@ -36,6 +36,8 @@
 ---@field fog_color? integer
 ---@field backface_culling? boolean
 
+function hello_world() end
+
 ---@class LimerenceCamera
 local LimerenceCamera = {}
 
