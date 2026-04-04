@@ -28,29 +28,12 @@ typedef struct {
     Nob_File_Paths *inputs;
 } Pack_Input_Context;
 
-typedef struct {
-    const char *name;
-    const char *stub;
-} Lua_Stub_Function_Spec;
-
-typedef struct {
-    const char *module_name;
-    const char *class_name;
-    const Lua_Stub_Function_Spec *functions;
-    size_t function_count;
-} Lua_Stub_Module_Spec;
-
-typedef struct {
-    const char *name;
-    const char *stub;
-} Lua_Stub_Method_Spec;
-
 static const char *starter_main_lua =
     "local bg = graphics.rgba(24, 24, 24, 255)\n"
     "\n"
     "function update(dt)\n"
-    "    if rgfw.is_key_pressed(rgfw.key_escape) then\n"
-    "        rgfw.close()\n"
+    "    if window.is_key_pressed(window.key_escape) then\n"
+    "        window.close()\n"
     "    end\n"
     "end\n"
     "\n"
@@ -73,177 +56,6 @@ static const char *project_luarc_json =
     "    \"enable\": true\n"
     "  }\n"
     "}\n";
-
-static const char *lua_stub_prelude =
-    "---@meta\n"
-    "\n"
-    "---@class LimerenceVec2\n"
-    "---@field x number\n"
-    "---@field y number\n"
-    "\n"
-    "---@class LimerenceVec3\n"
-    "---@field x number\n"
-    "---@field y number\n"
-    "---@field z number\n"
-    "\n"
-    "---@class LimerenceVec4\n"
-    "---@field x number\n"
-    "---@field y number\n"
-    "---@field z number\n"
-    "---@field w number\n"
-    "\n"
-    "---@class LimerenceMat4\n"
-    "---@field type string\n"
-    "---@field [integer] number\n"
-    "\n"
-    "---@class LimerenceDrawOptions\n"
-    "---@field near_plane? number\n"
-    "---@field lighting_enabled? boolean\n"
-    "---@field lighting_mode? 'none'|'flat'|'gouraud'\n"
-    "---@field light_direction_world? LimerenceVec3\n"
-    "---@field ambient_strength? number\n"
-    "---@field diffuse_strength? number\n"
-    "---@field specular_strength? number\n"
-    "---@field shininess? number\n"
-    "---@field occlusion_culling? boolean\n"
-    "---@field occlusion_test_step? integer\n"
-    "---@field fog_start? number\n"
-    "---@field fog_end? number\n"
-    "---@field fog_power? number\n"
-    "---@field fog_color? integer\n"
-    "---@field backface_culling? boolean\n"
-    "\n"
-    "---@class LimerenceCamera\n"
-    "local LimerenceCamera = {}\n"
-    "\n"
-    "function hello_world() end\n"
-    "\n";
-
-static const char *lua_stub_rgfw_constants[] = {
-    "key_escape",
-    "key_up",
-    "key_down",
-    "key_left",
-    "key_right",
-    "key_w",
-    "key_a",
-    "key_s",
-    "key_d",
-    "key_q",
-    "key_e",
-    "key_space",
-    "key_shift_left",
-    "key_shift_right",
-    "mouse_left",
-    "mouse_right",
-    "mouse_middle",
-};
-
-static const Lua_Stub_Function_Spec lua_stub_rgfw_functions[] = {
-    {"get_width", "---@return integer\nfunction rgfw.get_width() end\n"},
-    {"get_height", "---@return integer\nfunction rgfw.get_height() end\n"},
-    {"should_close", "---@return boolean\nfunction rgfw.should_close() end\n"},
-    {"close", "function rgfw.close() end\n"},
-    {"set_exit_key", "---@param key integer\nfunction rgfw.set_exit_key(key) end\n"},
-    {"show_mouse", "---@param visible boolean\nfunction rgfw.show_mouse(visible) end\n"},
-    {"get_mouse_vector", "---@return LimerenceVec2\nfunction rgfw.get_mouse_vector() end\n"},
-    {"hold_mouse", "function rgfw.hold_mouse() end\n"},
-    {"unhold_mouse", "function rgfw.unhold_mouse() end\n"},
-    {"is_key_pressed", "---@param key integer\n---@return boolean\nfunction rgfw.is_key_pressed(key) end\n"},
-    {"is_key_released", "---@param key integer\n---@return boolean\nfunction rgfw.is_key_released(key) end\n"},
-    {"is_key_down", "---@param key integer\n---@return boolean\nfunction rgfw.is_key_down(key) end\n"},
-    {"is_mouse_pressed", "---@param button integer\n---@return boolean\nfunction rgfw.is_mouse_pressed(button) end\n"},
-    {"is_mouse_released", "---@param button integer\n---@return boolean\nfunction rgfw.is_mouse_released(button) end\n"},
-    {"is_mouse_down", "---@param button integer\n---@return boolean\nfunction rgfw.is_mouse_down(button) end\n"},
-};
-
-static const Lua_Stub_Function_Spec lua_stub_graphics_functions[] = {
-    {"rgba", "---@param r integer\n---@param g integer\n---@param b integer\n---@param a? integer\n---@return integer\nfunction graphics.rgba(r, g, b, a) end\n"},
-    {"get_width", "---@return integer\nfunction graphics.get_width() end\n"},
-    {"get_height", "---@return integer\nfunction graphics.get_height() end\n"},
-    {"clear", "---@param color integer\nfunction graphics.clear(color) end\n"},
-    {"rect", "---@param x integer\n---@param y integer\n---@param w integer\n---@param h integer\n---@param color integer\nfunction graphics.rect(x, y, w, h, color) end\n"},
-    {"frame", "---@param x integer\n---@param y integer\n---@param w integer\n---@param h integer\n---@param color integer\nfunction graphics.frame(x, y, w, h, color) end\n"},
-    {"circle", "---@param x integer\n---@param y integer\n---@param r integer\n---@param color integer\nfunction graphics.circle(x, y, r, color) end\n"},
-    {"line", "---@param x1 integer\n---@param y1 integer\n---@param x2 integer\n---@param y2 integer\n---@param color integer\nfunction graphics.line(x1, y1, x2, y2, color) end\n"},
-    {"triangle", "---@param x1 integer\n---@param y1 integer\n---@param x2 integer\n---@param y2 integer\n---@param x3 integer\n---@param y3 integer\n---@param color integer\nfunction graphics.triangle(x1, y1, x2, y2, x3, y3, color) end\n"},
-    {"set_pixel", "---@param x integer\n---@param y integer\n---@param color integer\nfunction graphics.set_pixel(x, y, color) end\n"},
-};
-
-static const Lua_Stub_Function_Spec lua_stub_core_functions[] = {
-    {"begin_frame", "---@param clear_color integer\n---@param clear_depth? number\nfunction core.begin_frame(clear_color, clear_depth) end\n"},
-    {"draw_text", "---@param font string\n---@param text string\n---@param x integer\n---@param y integer\n---@param scale integer\n---@param color integer\nfunction core.draw_text(font, text, x, y, scale, color) end\n"},
-    {"draw_model", "---@param model string\n---@param model_matrix LimerenceMat4\n---@param view_matrix LimerenceMat4\n---@param projection_matrix LimerenceMat4\n---@param color integer\n---@param options? LimerenceDrawOptions\nfunction core.draw_model(model, model_matrix, view_matrix, projection_matrix, color, options) end\n"},
-    {"camera", "---@param position_or_x LimerenceVec3|table|number\n---@param y_or_pitch? number\n---@param z_or_yaw? number\n---@param pitch? number\n---@param yaw? number\n---@return LimerenceCamera\nfunction core.camera(position_or_x, y_or_pitch, z_or_yaw, pitch, yaw) end\n"},
-};
-
-static const Lua_Stub_Function_Spec lua_stub_hmm_functions[] = {
-    {"vec2", "---@param x number\n---@param y number\n---@return LimerenceVec2\nfunction hmm.vec2(x, y) end\n"},
-    {"vec3", "---@param x number\n---@param y number\n---@param z number\n---@return LimerenceVec3\nfunction hmm.vec3(x, y, z) end\n"},
-    {"vec4", "---@param x number\n---@param y number\n---@param z number\n---@param w number\n---@return LimerenceVec4\nfunction hmm.vec4(x, y, z, w) end\n"},
-    {"add3", "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction hmm.add3(a, b) end\n"},
-    {"sub3", "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction hmm.sub3(a, b) end\n"},
-    {"mul3f", "---@param value LimerenceVec3\n---@param scalar number\n---@return LimerenceVec3\nfunction hmm.mul3f(value, scalar) end\n"},
-    {"dot3", "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return number\nfunction hmm.dot3(a, b) end\n"},
-    {"cross", "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction hmm.cross(a, b) end\n"},
-    {"len3", "---@param value LimerenceVec3\n---@return number\nfunction hmm.len3(value) end\n"},
-    {"norm3", "---@param value LimerenceVec3\n---@return LimerenceVec3\nfunction hmm.norm3(value) end\n"},
-    {"lerp3", "---@param a LimerenceVec3\n---@param t number\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction hmm.lerp3(a, t, b) end\n"},
-    {"sin", "---@param value number\n---@return number\nfunction hmm.sin(value) end\n"},
-    {"cos", "---@param value number\n---@return number\nfunction hmm.cos(value) end\n"},
-    {"clamp", "---@param min number\n---@param value number\n---@param max number\n---@return number\nfunction hmm.clamp(min, value, max) end\n"},
-    {"identity4", "---@return LimerenceMat4\nfunction hmm.identity4() end\n"},
-    {"translate", "---@param value LimerenceVec3\n---@return LimerenceMat4\nfunction hmm.translate(value) end\n"},
-    {"scale", "---@param value LimerenceVec3\n---@return LimerenceMat4\nfunction hmm.scale(value) end\n"},
-    {"rotate_rh", "---@param degrees number\n---@param axis LimerenceVec3\n---@return LimerenceMat4\nfunction hmm.rotate_rh(degrees, axis) end\n"},
-    {"look_at_rh", "---@param eye LimerenceVec3\n---@param center LimerenceVec3\n---@param up LimerenceVec3\n---@return LimerenceMat4\nfunction hmm.look_at_rh(eye, center, up) end\n"},
-    {"perspective_rh_no", "---@param fov_degrees number\n---@param aspect number\n---@param near_plane number\n---@param far_plane number\n---@return LimerenceMat4\nfunction hmm.perspective_rh_no(fov_degrees, aspect, near_plane, far_plane) end\n"},
-    {"mul_m4", "---@param a LimerenceMat4\n---@param b LimerenceMat4\n---@return LimerenceMat4\nfunction hmm.mul_m4(a, b) end\n"},
-    {"transform_point", "---@param matrix LimerenceMat4\n---@param point LimerenceVec3\n---@return LimerenceVec3\nfunction hmm.transform_point(matrix, point) end\n"},
-    {"transform_vector", "---@param matrix LimerenceMat4\n---@param vector LimerenceVec3\n---@return LimerenceVec3\nfunction hmm.transform_vector(matrix, vector) end\n"},
-};
-
-static const Lua_Stub_Function_Spec lua_stub_audio_functions[] = {
-    {"init", "---@return boolean ok, string? err\nfunction audio.init() end\n"},
-    {"shutdown", "function audio.shutdown() end\n"},
-    {"is_ready", "---@return boolean\nfunction audio.is_ready() end\n"},
-    {"set_master_volume", "---@param volume number\nfunction audio.set_master_volume(volume) end\n"},
-    {"play", "---@param path string\n---@return boolean ok, string? err\nfunction audio.play(path) end\n"},
-    {"load_sound", "---@param path string\n---@return integer? handle, string? err\nfunction audio.load_sound(path) end\n"},
-    {"unload_sound", "---@param handle integer\nfunction audio.unload_sound(handle) end\n"},
-    {"start", "---@param handle integer\n---@return boolean ok, string? err\nfunction audio.start(handle) end\n"},
-    {"stop", "---@param handle integer\n---@return boolean ok, string? err\nfunction audio.stop(handle) end\n"},
-    {"set_volume", "---@param handle integer\n---@param volume number\nfunction audio.set_volume(handle, volume) end\n"},
-    {"set_pitch", "---@param handle integer\n---@param pitch number\nfunction audio.set_pitch(handle, pitch) end\n"},
-    {"set_pan", "---@param handle integer\n---@param pan number\nfunction audio.set_pan(handle, pan) end\n"},
-    {"set_looping", "---@param handle integer\n---@param looping boolean\nfunction audio.set_looping(handle, looping) end\n"},
-    {"is_playing", "---@param handle integer\n---@return boolean\nfunction audio.is_playing(handle) end\n"},
-    {"at_end", "---@param handle integer\n---@return boolean\nfunction audio.at_end(handle) end\n"},
-    {"seek", "---@param handle integer\n---@param seconds number\n---@return boolean ok, string? err\nfunction audio.seek(handle, seconds) end\n"},
-};
-
-static const Lua_Stub_Method_Spec lua_stub_camera_methods[] = {
-    {"get_position", "---@return LimerenceVec3\nfunction LimerenceCamera:get_position() end\n"},
-    {"set_position", "---@param position LimerenceVec3\nfunction LimerenceCamera:set_position(position) end\n"},
-    {"get_pitch", "---@return number\nfunction LimerenceCamera:get_pitch() end\n"},
-    {"set_pitch", "---@param pitch number\nfunction LimerenceCamera:set_pitch(pitch) end\n"},
-    {"get_yaw", "---@return number\nfunction LimerenceCamera:get_yaw() end\n"},
-    {"set_yaw", "---@param yaw number\nfunction LimerenceCamera:set_yaw(yaw) end\n"},
-    {"look", "---@param yaw_delta number\n---@param pitch_delta number\n---@param pitch_min? number\n---@param pitch_max? number\nfunction LimerenceCamera:look(yaw_delta, pitch_delta, pitch_min, pitch_max) end\n"},
-    {"move", "---@param forward_distance number\n---@param strafe_distance number\n---@param vertical_distance number\nfunction LimerenceCamera:move(forward_distance, strafe_distance, vertical_distance) end\n"},
-    {"forward", "---@return LimerenceVec3\nfunction LimerenceCamera:forward() end\n"},
-    {"flat_forward", "---@return LimerenceVec3\nfunction LimerenceCamera:flat_forward() end\n"},
-    {"right", "---@return LimerenceVec3\nfunction LimerenceCamera:right() end\n"},
-    {"view", "---@return LimerenceMat4\nfunction LimerenceCamera:view() end\n"},
-};
-
-static const Lua_Stub_Module_Spec lua_stub_modules[] = {
-    {"rgfw", "rgfw", lua_stub_rgfw_functions, NOB_ARRAY_LEN(lua_stub_rgfw_functions)},
-    {"graphics", "graphics", lua_stub_graphics_functions, NOB_ARRAY_LEN(lua_stub_graphics_functions)},
-    {"core", "core", lua_stub_core_functions, NOB_ARRAY_LEN(lua_stub_core_functions)},
-    {"hmm", "hmm", lua_stub_hmm_functions, NOB_ARRAY_LEN(lua_stub_hmm_functions)},
-    {"audio", "audio", lua_stub_audio_functions, NOB_ARRAY_LEN(lua_stub_audio_functions)},
-};
 
 static void log_assets_error(const Assets_Error *error)
 {
@@ -403,44 +215,46 @@ static void append_lua_stub_generic_function(Nob_String_Builder *sb, const char 
     nob_sb_appendf(sb, "function %s.%s(...) end\n", module_name, name);
 }
 
+static void append_lua_stub_global_function(Nob_String_Builder *sb, const char *name)
+{
+    nob_sb_appendf(sb, "function %s(...) end\n", name);
+}
+
 static void append_lua_stub_generic_method(Nob_String_Builder *sb, const char *class_name, const char *name)
 {
     nob_sb_appendf(sb, "function %s:%s(...) end\n", class_name, name);
 }
 
-static void append_lua_stub_module(Nob_String_Builder *sb, const Lua_Stub_Module_Spec *module)
+static void append_lua_stub_module(Nob_String_Builder *sb, const Lua_API_Module_Def *module)
 {
     nob_sb_appendf(sb, "---@class %s\n", module->class_name);
-    if (strcmp(module->module_name, "rgfw") == 0) {
-        for (size_t i = 0; i < NOB_ARRAY_LEN(lua_stub_rgfw_constants); ++i) {
-            nob_sb_appendf(sb, "---@field %s integer\n", lua_stub_rgfw_constants[i]);
-        }
+    for (size_t i = 0; i < module->constant_count; ++i) {
+        nob_sb_appendf(sb, "---@field %s integer\n", module->constants[i]);
     }
     nob_sb_appendf(sb, "%s = {}\n", module->module_name);
     nob_sb_append_cstr(sb, "\n");
 
     for (size_t i = 0; i < module->function_count; ++i) {
-        const Lua_Stub_Function_Spec *function = &module->functions[i];
-
-        if (function->stub != NULL) {
-            nob_sb_append_cstr(sb, function->stub);
+        if (module->functions[i].stub != NULL) {
+            nob_sb_append_cstr(sb, module->functions[i].stub);
         } else {
-            append_lua_stub_generic_function(sb, module->module_name, function->name);
+            append_lua_stub_generic_function(sb, module->module_name, module->functions[i].name);
         }
     }
 
     nob_sb_append_cstr(sb, "\n");
 }
 
-static void append_lua_stub_camera_methods(Nob_String_Builder *sb)
+static void append_lua_stub_class_methods(Nob_String_Builder *sb, const Lua_API_Class_Def *class_def)
 {
-    for (size_t i = 0; i < NOB_ARRAY_LEN(lua_stub_camera_methods); ++i) {
-        const Lua_Stub_Method_Spec *method = &lua_stub_camera_methods[i];
+    nob_sb_appendf(sb, "---@class %s\n", class_def->class_name);
+    nob_sb_appendf(sb, "local %s = {}\n\n", class_def->class_name);
 
-        if (method->stub != NULL) {
-            nob_sb_append_cstr(sb, method->stub);
+    for (size_t i = 0; i < class_def->method_count; ++i) {
+        if (class_def->methods[i].stub != NULL) {
+            nob_sb_append_cstr(sb, class_def->methods[i].stub);
         } else {
-            append_lua_stub_generic_method(sb, "LimerenceCamera", method->name);
+            append_lua_stub_generic_method(sb, class_def->class_name, class_def->methods[i].name);
         }
     }
 
@@ -465,10 +279,29 @@ static bool generate_lua_lsp_files(const char *project_root)
         nob_return_defer(false);
     }
 
-    nob_sb_append_cstr(&stub, lua_stub_prelude);
-    append_lua_stub_camera_methods(&stub);
-    for (size_t i = 0; i < NOB_ARRAY_LEN(lua_stub_modules); ++i) {
-        append_lua_stub_module(&stub, &lua_stub_modules[i]);
+    nob_sb_append_cstr(&stub, lua_api_stub_prelude());
+    for (size_t i = 0; i < lua_api_global_count(); ++i) {
+        const Lua_API_Global_Def *global = lua_api_global_def(i);
+
+        if (global == NULL) continue;
+        if (global->stub != NULL) {
+            nob_sb_append_cstr(&stub, global->stub);
+        } else {
+            append_lua_stub_global_function(&stub, global->name);
+        }
+    }
+    nob_sb_append_cstr(&stub, "\n");
+    for (size_t i = 0; i < lua_api_class_count(); ++i) {
+        const Lua_API_Class_Def *class_def = lua_api_class_def(i);
+
+        if (class_def == NULL) continue;
+        append_lua_stub_class_methods(&stub, class_def);
+    }
+    for (size_t i = 0; i < lua_api_module_count(); ++i) {
+        const Lua_API_Module_Def *module = lua_api_module_def(i);
+
+        if (module == NULL) continue;
+        append_lua_stub_module(&stub, module);
     }
     nob_sb_append_null(&stub);
 
@@ -529,9 +362,9 @@ static void print_usage(FILE *stream, const char *program_name)
 
 static void append_pack_dependencies(Nob_File_Paths *inputs, const char *repo_root)
 {
-    da_append(inputs, path_join(repo_root, "assets.h"));
-    da_append(inputs, path_join(repo_root, "assets_runtime.h"));
-    da_append(inputs, path_join(repo_root, "assets_runtime.c"));
+    da_append(inputs, path_join(repo_root, "src/assets.h"));
+    da_append(inputs, path_join(repo_root, "src/assets_runtime.h"));
+    da_append(inputs, path_join(repo_root, "src/assets_runtime.c"));
     da_append(inputs, path_join(repo_root, "third_party/nob.h"));
     da_append(inputs, path_join(repo_root, "third_party/stb_image.h"));
     da_append(inputs, path_join(repo_root, "third_party/stb_truetype.h"));

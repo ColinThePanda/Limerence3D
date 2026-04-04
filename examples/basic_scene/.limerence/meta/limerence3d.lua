@@ -36,10 +36,10 @@
 ---@field fog_color? integer
 ---@field backface_culling? boolean
 
+function hello_world() end
+
 ---@class LimerenceCamera
 local LimerenceCamera = {}
-
-function hello_world() end
 
 ---@return LimerenceVec3
 function LimerenceCamera:get_position() end
@@ -71,7 +71,7 @@ function LimerenceCamera:right() end
 ---@return LimerenceMat4
 function LimerenceCamera:view() end
 
----@class rgfw
+---@class LimerenceWindow
 ---@field key_escape integer
 ---@field key_up integer
 ---@field key_down integer
@@ -89,43 +89,43 @@ function LimerenceCamera:view() end
 ---@field mouse_left integer
 ---@field mouse_right integer
 ---@field mouse_middle integer
-rgfw = {}
+window = {}
 
 ---@return integer
-function rgfw.get_width() end
+function window.get_width() end
 ---@return integer
-function rgfw.get_height() end
+function window.get_height() end
 ---@return boolean
-function rgfw.should_close() end
-function rgfw.close() end
+function window.should_close() end
+function window.close() end
 ---@param key integer
-function rgfw.set_exit_key(key) end
+function window.set_exit_key(key) end
 ---@param visible boolean
-function rgfw.show_mouse(visible) end
+function window.show_mouse(visible) end
 ---@return LimerenceVec2
-function rgfw.get_mouse_vector() end
-function rgfw.hold_mouse() end
-function rgfw.unhold_mouse() end
+function window.get_mouse_vector() end
+function window.hold_mouse() end
+function window.unhold_mouse() end
 ---@param key integer
 ---@return boolean
-function rgfw.is_key_pressed(key) end
+function window.is_key_pressed(key) end
 ---@param key integer
 ---@return boolean
-function rgfw.is_key_released(key) end
+function window.is_key_released(key) end
 ---@param key integer
 ---@return boolean
-function rgfw.is_key_down(key) end
+function window.is_key_down(key) end
 ---@param button integer
 ---@return boolean
-function rgfw.is_mouse_pressed(button) end
+function window.is_mouse_pressed(button) end
 ---@param button integer
 ---@return boolean
-function rgfw.is_mouse_released(button) end
+function window.is_mouse_released(button) end
 ---@param button integer
 ---@return boolean
-function rgfw.is_mouse_down(button) end
+function window.is_mouse_down(button) end
 
----@class graphics
+---@class LimerenceGraphics
 graphics = {}
 
 ---@param r integer
@@ -150,8 +150,9 @@ function graphics.rect(x, y, w, h, color) end
 ---@param y integer
 ---@param w integer
 ---@param h integer
+---@param thickness integer
 ---@param color integer
-function graphics.frame(x, y, w, h, color) end
+function graphics.frame(x, y, w, h, thickness, color) end
 ---@param x integer
 ---@param y integer
 ---@param r integer
@@ -176,7 +177,7 @@ function graphics.triangle(x1, y1, x2, y2, x3, y3, color) end
 ---@param color integer
 function graphics.set_pixel(x, y, color) end
 
----@class core
+---@class LimerenceCore
 core = {}
 
 ---@param clear_color integer
@@ -204,103 +205,103 @@ function core.draw_model(model, model_matrix, view_matrix, projection_matrix, co
 ---@return LimerenceCamera
 function core.camera(position_or_x, y_or_pitch, z_or_yaw, pitch, yaw) end
 
----@class hmm
-hmm = {}
+---@class LimerenceMath
+math = {}
 
 ---@param x number
 ---@param y number
 ---@return LimerenceVec2
-function hmm.vec2(x, y) end
+function math.vec2(x, y) end
 ---@param x number
 ---@param y number
 ---@param z number
 ---@return LimerenceVec3
-function hmm.vec3(x, y, z) end
+function math.vec3(x, y, z) end
 ---@param x number
 ---@param y number
 ---@param z number
 ---@param w number
 ---@return LimerenceVec4
-function hmm.vec4(x, y, z, w) end
+function math.vec4(x, y, z, w) end
 ---@param a LimerenceVec3
 ---@param b LimerenceVec3
 ---@return LimerenceVec3
-function hmm.add3(a, b) end
+function math.add3(a, b) end
 ---@param a LimerenceVec3
 ---@param b LimerenceVec3
 ---@return LimerenceVec3
-function hmm.sub3(a, b) end
+function math.sub3(a, b) end
 ---@param value LimerenceVec3
 ---@param scalar number
 ---@return LimerenceVec3
-function hmm.mul3f(value, scalar) end
+function math.mul3f(value, scalar) end
 ---@param a LimerenceVec3
 ---@param b LimerenceVec3
 ---@return number
-function hmm.dot3(a, b) end
+function math.dot3(a, b) end
 ---@param a LimerenceVec3
 ---@param b LimerenceVec3
 ---@return LimerenceVec3
-function hmm.cross(a, b) end
+function math.cross(a, b) end
 ---@param value LimerenceVec3
 ---@return number
-function hmm.len3(value) end
+function math.len3(value) end
 ---@param value LimerenceVec3
 ---@return LimerenceVec3
-function hmm.norm3(value) end
+function math.norm3(value) end
 ---@param a LimerenceVec3
 ---@param t number
 ---@param b LimerenceVec3
 ---@return LimerenceVec3
-function hmm.lerp3(a, t, b) end
+function math.lerp3(a, t, b) end
 ---@param value number
 ---@return number
-function hmm.sin(value) end
+function math.sin(value) end
 ---@param value number
 ---@return number
-function hmm.cos(value) end
+function math.cos(value) end
 ---@param min number
 ---@param value number
 ---@param max number
 ---@return number
-function hmm.clamp(min, value, max) end
+function math.clamp(min, value, max) end
 ---@return LimerenceMat4
-function hmm.identity4() end
+function math.identity4() end
 ---@param value LimerenceVec3
 ---@return LimerenceMat4
-function hmm.translate(value) end
+function math.translate(value) end
 ---@param value LimerenceVec3
 ---@return LimerenceMat4
-function hmm.scale(value) end
+function math.scale(value) end
 ---@param degrees number
 ---@param axis LimerenceVec3
 ---@return LimerenceMat4
-function hmm.rotate_rh(degrees, axis) end
+function math.rotate_rh(degrees, axis) end
 ---@param eye LimerenceVec3
 ---@param center LimerenceVec3
 ---@param up LimerenceVec3
 ---@return LimerenceMat4
-function hmm.look_at_rh(eye, center, up) end
+function math.look_at_rh(eye, center, up) end
 ---@param fov_degrees number
 ---@param aspect number
 ---@param near_plane number
 ---@param far_plane number
 ---@return LimerenceMat4
-function hmm.perspective_rh_no(fov_degrees, aspect, near_plane, far_plane) end
+function math.perspective_rh_no(fov_degrees, aspect, near_plane, far_plane) end
 ---@param a LimerenceMat4
 ---@param b LimerenceMat4
 ---@return LimerenceMat4
-function hmm.mul_m4(a, b) end
+function math.mul_m4(a, b) end
 ---@param matrix LimerenceMat4
 ---@param point LimerenceVec3
 ---@return LimerenceVec3
-function hmm.transform_point(matrix, point) end
+function math.transform_point(matrix, point) end
 ---@param matrix LimerenceMat4
 ---@param vector LimerenceVec3
 ---@return LimerenceVec3
-function hmm.transform_vector(matrix, vector) end
+function math.transform_vector(matrix, vector) end
 
----@class audio
+---@class LimerenceAudio
 audio = {}
 
 ---@return boolean ok, string? err

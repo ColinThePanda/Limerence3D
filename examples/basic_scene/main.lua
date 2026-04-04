@@ -1,4 +1,4 @@
-local SENSITIVITY = 0.5
+local SENSITIVITY = 0.1
 local MOVEMENT_SPEED = 3.0
 local FOREGROUND_COLOR = 0xFFED9564
 local BACKGROUND_COLOR = 0xFF181818
@@ -9,37 +9,33 @@ local MOUSE_NORMAL = 1
 local MOUSE_DISABLED = 2
 
 local mouse_mode = MOUSE_NORMAL
-local camera = nil
-local projection = nil
-local draw_options = nil
 local angle = 0.0
 local last_dt = 1.0 / 60.0
-local music = nil
 
 local function set_mouse_mode(mode)
     mouse_mode = mode
     if mode == MOUSE_DISABLED then
-        rgfw.show_mouse(false)
-        rgfw.hold_mouse()
+        window.show_mouse(false)
+        window.hold_mouse()
     else
-        rgfw.show_mouse(true)
-        rgfw.unhold_mouse()
+        window.show_mouse(true)
+        window.unhold_mouse()
     end
 end
 
 local function make_model_matrix(position, scale, rotation_degrees, axis)
-    return hmm.mul_m4(
-        hmm.translate(position),
-        hmm.mul_m4(
-            hmm.rotate_rh(rotation_degrees, axis),
-            hmm.scale(scale)
+    return math.mul_m4(
+        math.translate(position),
+        math.mul_m4(
+            math.rotate_rh(rotation_degrees, axis),
+            math.scale(scale)
         )
     )
 end
 
 local function append_draw_call(calls, asset, position, scale, rotation_degrees, axis, color, view)
     local model = make_model_matrix(position, scale, rotation_degrees, axis)
-    local view_center = hmm.transform_point(view, position)
+    local view_center = math.transform_point(view, position)
 
     calls[#calls + 1] = {
         asset = asset,
@@ -55,10 +51,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "cube",
-        hmm.vec3(0.0, -1.55, 0.0),
-        hmm.vec3(8.0, 0.30, 8.0),
+        math.vec3(0.0, -1.55, 0.0),
+        math.vec3(8.0, 0.30, 8.0),
         0.0,
-        hmm.vec3(0.0, 1.0, 0.0),
+        math.vec3(0.0, 1.0, 0.0),
         0xFF3C4650,
         view
     )
@@ -66,10 +62,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "cube",
-        hmm.vec3(0.0, 0.1, -4.6),
-        hmm.vec3(7.5, 3.0, 0.35),
+        math.vec3(0.0, 0.1, -4.6),
+        math.vec3(7.5, 3.0, 0.35),
         0.0,
-        hmm.vec3(0.0, 1.0, 0.0),
+        math.vec3(0.0, 1.0, 0.0),
         0xFF25313A,
         view
     )
@@ -77,10 +73,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "cube",
-        hmm.vec3(-3.1, -0.15, -1.6),
-        hmm.vec3(0.8, 2.8, 0.8),
+        math.vec3(-3.1, -0.15, -1.6),
+        math.vec3(0.8, 2.8, 0.8),
         0.0,
-        hmm.vec3(0.0, 1.0, 0.0),
+        math.vec3(0.0, 1.0, 0.0),
         0xFFC85A44,
         view
     )
@@ -88,10 +84,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "cube",
-        hmm.vec3(3.0, -0.35, -1.4),
-        hmm.vec3(1.3, 1.9, 0.9),
+        math.vec3(3.0, -0.35, -1.4),
+        math.vec3(1.3, 1.9, 0.9),
         22.0,
-        hmm.vec3(0.0, 1.0, 0.0),
+        math.vec3(0.0, 1.0, 0.0),
         0xFF5E8E3E,
         view
     )
@@ -99,10 +95,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "cube",
-        hmm.vec3(-1.75, -0.95, 2.1),
-        hmm.vec3(1.6, 0.55, 2.3),
+        math.vec3(-1.75, -0.95, 2.1),
+        math.vec3(1.6, 0.55, 2.3),
         18.0,
-        hmm.vec3(0.0, 1.0, 0.0),
+        math.vec3(0.0, 1.0, 0.0),
         0xFF4979A8,
         view
     )
@@ -110,10 +106,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "cube",
-        hmm.vec3(2.1, -0.55, 1.8),
-        hmm.vec3(2.7, 0.35, 0.8),
+        math.vec3(2.1, -0.55, 1.8),
+        math.vec3(2.7, 0.35, 0.8),
         -28.0,
-        hmm.vec3(1.0, 0.0, 0.0),
+        math.vec3(1.0, 0.0, 0.0),
         0xFF8A6BCE,
         view
     )
@@ -121,10 +117,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "cube",
-        hmm.vec3(0.0, -0.95, 0.0),
-        hmm.vec3(1.8, 0.6, 1.8),
+        math.vec3(0.0, -0.95, 0.0),
+        math.vec3(1.8, 0.6, 1.8),
         0.0,
-        hmm.vec3(0.0, 1.0, 0.0),
+        math.vec3(0.0, 1.0, 0.0),
         0xFFD2B870,
         view
     )
@@ -132,10 +128,10 @@ local function draw_test_scene(view, teapot_rotation)
     append_draw_call(
         calls,
         "utah_teapot",
-        hmm.vec3(0.0, 0.1, 0.0),
-        hmm.vec3(0.4, 0.4, 0.4),
+        math.vec3(0.0, 0.1, 0.0),
+        math.vec3(0.4, 0.4, 0.4),
         teapot_rotation,
-        hmm.vec3(0.0, 1.0, 0.0),
+        math.vec3(0.0, 1.0, 0.0),
         FOREGROUND_COLOR,
         view
     )
@@ -168,10 +164,10 @@ function init()
     end
 
     camera = core.camera({0.0, 1.35, 8.0}, 8.0, 180.0)
-    projection = hmm.perspective_rh_no(70.0, rgfw.get_width() / rgfw.get_height(), NEAR_PLANE, FAR_PLANE)
+    projection = math.perspective_rh_no(70.0, window.get_width() / window.get_height(), NEAR_PLANE, FAR_PLANE)
     draw_options = {
         near_plane = NEAR_PLANE,
-        light_direction_world = hmm.vec3(0.0, -1.0, -1.0),
+        light_direction_world = math.vec3(0.0, -1.0, -1.0),
         ambient_strength = 0.15,
         diffuse_strength = 0.85,
         specular_strength = 0.35,
@@ -180,39 +176,39 @@ function init()
         fog_power = 1.8,
     }
 
-    assert(rgfw.get_width() > 0)
-    assert(math.abs(hmm.len3(hmm.vec3(3, 4, 0)) - 5.0) < 0.001)
+    assert(window.get_width() > 0)
+    assert(math.abs(math.len3(math.vec3(3, 4, 0)) - 5.0) < 0.001)
     assert(camera:view().type == "mat4")
 
     set_mouse_mode(MOUSE_DISABLED)
-    rgfw.set_exit_key(rgfw.key_escape)
+    window.set_exit_key(window.key_escape)
 end
 
 function update(dt)
     local forward_distance = 0.0
     local strafe_distance = 0.0
     local vertical_distance = 0.0
-    local mouse_delta = rgfw.get_mouse_vector()
+    local mouse_delta = window.get_mouse_vector()
     local yaw_delta = 0.0
     local pitch_delta = 0.0
 
-    if rgfw.is_key_pressed(rgfw.key_escape) then
+    if window.is_key_pressed(window.key_escape) then
         set_mouse_mode(MOUSE_NORMAL)
-        rgfw.close()
+        window.close()
     end
 
-    if rgfw.is_mouse_pressed(rgfw.mouse_left) and mouse_mode == MOUSE_NORMAL then
+    if window.is_mouse_pressed(window.mouse_left) and mouse_mode == MOUSE_NORMAL then
         set_mouse_mode(MOUSE_DISABLED)
     end
 
-    if rgfw.is_key_down(rgfw.key_w) then forward_distance = forward_distance + MOVEMENT_SPEED * dt end
-    if rgfw.is_key_down(rgfw.key_s) then forward_distance = forward_distance - MOVEMENT_SPEED * dt end
-    if rgfw.is_key_down(rgfw.key_a) then strafe_distance = strafe_distance - MOVEMENT_SPEED * dt end
-    if rgfw.is_key_down(rgfw.key_d) then strafe_distance = strafe_distance + MOVEMENT_SPEED * dt end
-    if rgfw.is_key_down(rgfw.key_space) then vertical_distance = vertical_distance + MOVEMENT_SPEED * dt end
-    if rgfw.is_key_down(rgfw.key_e) then vertical_distance = vertical_distance + MOVEMENT_SPEED * dt end
-    if rgfw.is_key_down(rgfw.key_q) then vertical_distance = vertical_distance - MOVEMENT_SPEED * dt end
-    if rgfw.is_key_down(rgfw.key_shift_left) or rgfw.is_key_down(rgfw.key_shift_right) then
+    if window.is_key_down(window.key_w) then forward_distance = forward_distance + MOVEMENT_SPEED * dt end
+    if window.is_key_down(window.key_s) then forward_distance = forward_distance - MOVEMENT_SPEED * dt end
+    if window.is_key_down(window.key_a) then strafe_distance = strafe_distance - MOVEMENT_SPEED * dt end
+    if window.is_key_down(window.key_d) then strafe_distance = strafe_distance + MOVEMENT_SPEED * dt end
+    if window.is_key_down(window.key_space) then vertical_distance = vertical_distance + MOVEMENT_SPEED * dt end
+    if window.is_key_down(window.key_e) then vertical_distance = vertical_distance + MOVEMENT_SPEED * dt end
+    if window.is_key_down(window.key_q) then vertical_distance = vertical_distance - MOVEMENT_SPEED * dt end
+    if window.is_key_down(window.key_shift_left) or window.is_key_down(window.key_shift_right) then
         vertical_distance = vertical_distance - MOVEMENT_SPEED * dt
     end
 

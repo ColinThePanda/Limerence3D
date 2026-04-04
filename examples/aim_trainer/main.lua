@@ -26,53 +26,53 @@ local hit_sound = nil
 local targets = {}
 
 local spawn_points = {
-    hmm.vec3(-4.8, 1.2, -5.5),
-    hmm.vec3(0.0, 1.2, -5.5),
-    hmm.vec3(4.8, 1.2, -5.5),
-    hmm.vec3(-4.0, 2.5, -9.0),
-    hmm.vec3(0.0, 2.7, -10.0),
-    hmm.vec3(4.0, 2.5, -9.0),
-    hmm.vec3(-5.2, 3.9, -13.0),
-    hmm.vec3(0.0, 4.2, -14.5),
-    hmm.vec3(5.2, 3.9, -13.0),
+    math.vec3(-4.8, 1.2, -5.5),
+    math.vec3(0.0, 1.2, -5.5),
+    math.vec3(4.8, 1.2, -5.5),
+    math.vec3(-4.0, 2.5, -9.0),
+    math.vec3(0.0, 2.7, -10.0),
+    math.vec3(4.0, 2.5, -9.0),
+    math.vec3(-5.2, 3.9, -13.0),
+    math.vec3(0.0, 4.2, -14.5),
+    math.vec3(5.2, 3.9, -13.0),
 }
 
 local arena_blocks = {
-    {asset = "cube", position = hmm.vec3(0.0, -1.3, -4.5), scale = hmm.vec3(14.0, 0.4, 24.0), rotation = 0.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = FLOOR_COLOR},
-    {asset = "cube", position = hmm.vec3(0.0, 2.5, -16.6), scale = hmm.vec3(14.0, 7.2, 0.4), rotation = 0.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = hmm.vec3(0.0, 2.5, 7.8), scale = hmm.vec3(14.0, 7.2, 0.4), rotation = 0.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = hmm.vec3(-7.2, 2.5, -4.5), scale = hmm.vec3(0.4, 7.2, 24.0), rotation = 0.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = hmm.vec3(7.2, 2.5, -4.5), scale = hmm.vec3(0.4, 7.2, 24.0), rotation = 0.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = hmm.vec3(0.0, 6.0, -4.5), scale = hmm.vec3(14.0, 0.35, 24.0), rotation = 0.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
-    {asset = "cube", position = hmm.vec3(0.0, 0.4, -8.2), scale = hmm.vec3(2.4, 0.25, 1.2), rotation = 0.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
-    {asset = "cube", position = hmm.vec3(-4.3, 1.8, -11.8), scale = hmm.vec3(1.8, 0.25, 1.2), rotation = 15.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
-    {asset = "cube", position = hmm.vec3(4.3, 1.8, -11.8), scale = hmm.vec3(1.8, 0.25, 1.2), rotation = -15.0, axis = hmm.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
+    {asset = "cube", position = math.vec3(0.0, -1.3, -4.5), scale = math.vec3(14.0, 0.4, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = FLOOR_COLOR},
+    {asset = "cube", position = math.vec3(0.0, 2.5, -16.6), scale = math.vec3(14.0, 7.2, 0.4), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
+    {asset = "cube", position = math.vec3(0.0, 2.5, 7.8), scale = math.vec3(14.0, 7.2, 0.4), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
+    {asset = "cube", position = math.vec3(-7.2, 2.5, -4.5), scale = math.vec3(0.4, 7.2, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
+    {asset = "cube", position = math.vec3(7.2, 2.5, -4.5), scale = math.vec3(0.4, 7.2, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
+    {asset = "cube", position = math.vec3(0.0, 6.0, -4.5), scale = math.vec3(14.0, 0.35, 24.0), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = WALL_COLOR},
+    {asset = "cube", position = math.vec3(0.0, 0.4, -8.2), scale = math.vec3(2.4, 0.25, 1.2), rotation = 0.0, axis = math.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
+    {asset = "cube", position = math.vec3(-4.3, 1.8, -11.8), scale = math.vec3(1.8, 0.25, 1.2), rotation = 15.0, axis = math.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
+    {asset = "cube", position = math.vec3(4.3, 1.8, -11.8), scale = math.vec3(1.8, 0.25, 1.2), rotation = -15.0, axis = math.vec3(0.0, 1.0, 0.0), color = PLATFORM_COLOR},
 }
 
 local function set_mouse_mode(mode)
     mouse_mode = mode
     if mode == MOUSE_DISABLED then
-        rgfw.show_mouse(false)
-        rgfw.hold_mouse()
+        window.show_mouse(false)
+        window.hold_mouse()
     else
-        rgfw.show_mouse(true)
-        rgfw.unhold_mouse()
+        window.show_mouse(true)
+        window.unhold_mouse()
     end
 end
 
 local function make_model_matrix(position, scale, rotation_degrees, axis)
-    return hmm.mul_m4(
-        hmm.translate(position),
-        hmm.mul_m4(
-            hmm.rotate_rh(rotation_degrees, axis),
-            hmm.scale(scale)
+    return math.mul_m4(
+        math.translate(position),
+        math.mul_m4(
+            math.rotate_rh(rotation_degrees, axis),
+            math.scale(scale)
         )
     )
 end
 
 local function append_draw_call(calls, asset, position, scale, rotation_degrees, axis, color, view)
     local model = make_model_matrix(position, scale, rotation_degrees, axis)
-    local view_center = hmm.transform_point(view, position)
+    local view_center = math.transform_point(view, position)
 
     calls[#calls + 1] = {
         asset = asset,
@@ -116,8 +116,8 @@ local function choose_spawn_index(excluded_index)
 end
 
 local function target_draw_position(target)
-    local bob_offset = hmm.sin(target.bob_phase) * 0.16
-    return hmm.add3(target.position, hmm.vec3(0.0, bob_offset, 0.0))
+    local bob_offset = math.sin(target.bob_phase) * 0.16
+    return math.add3(target.position, math.vec3(0.0, bob_offset, 0.0))
 end
 
 local function spawn_target(excluded_index)
@@ -168,18 +168,18 @@ end
 
 local function find_hit_target()
     local origin = camera:get_position()
-    local direction = hmm.norm3(camera:forward())
+    local direction = math.norm3(camera:forward())
     local best_index = nil
     local best_distance = nil
 
     for index, target in ipairs(targets) do
         local center = target_draw_position(target)
-        local to_target = hmm.sub3(center, origin)
-        local along = hmm.dot3(to_target, direction)
+        local to_target = math.sub3(center, origin)
+        local along = math.dot3(to_target, direction)
 
         if along > 0.0 then
-            local closest_point = hmm.add3(origin, hmm.mul3f(direction, along))
-            local miss_distance = hmm.len3(hmm.sub3(center, closest_point))
+            local closest_point = math.add3(origin, math.mul3f(direction, along))
+            local miss_distance = math.len3(math.sub3(center, closest_point))
 
             if miss_distance <= TARGET_RADIUS then
                 if best_distance == nil or along < best_distance then
@@ -240,9 +240,9 @@ local function draw_scene(view)
             calls,
             "sphere",
             target_draw_position(target),
-            hmm.vec3(TARGET_RADIUS, TARGET_RADIUS, TARGET_RADIUS),
+            math.vec3(TARGET_RADIUS, TARGET_RADIUS, TARGET_RADIUS),
             target.rotation,
-            hmm.vec3(0.0, 1.0, 0.0),
+            math.vec3(0.0, 1.0, 0.0),
             TARGET_COLOR,
             view
         )
@@ -258,8 +258,8 @@ local function draw_scene(view)
 end
 
 local function draw_crosshair()
-    local cx = math.floor(rgfw.get_width() / 2)
-    local cy = math.floor(rgfw.get_height() / 2)
+    local cx = math.floor(window.get_width() / 2)
+    local cy = math.floor(window.get_height() / 2)
     local arm = 8
     local gap = 3
 
@@ -271,7 +271,7 @@ end
 
 local function draw_centered_text(text, y, scale, color)
     local width = #text * scale * 11
-    local x = math.floor((rgfw.get_width() - width) * 0.5)
+    local x = math.floor((window.get_width() - width) * 0.5)
     core.draw_text("Iosevka-Regular", text, x, y, scale, color)
 end
 
@@ -285,7 +285,7 @@ local function draw_hud()
 end
 
 local function draw_game_over()
-    local center_y = math.floor(rgfw.get_height() * 0.35)
+    local center_y = math.floor(window.get_height() * 0.35)
 
     draw_centered_text("TIME UP", center_y, 2, TEXT_COLOR)
     draw_centered_text(string.format("score: %d", score), center_y + 42, 2, TEXT_COLOR)
@@ -310,11 +310,11 @@ function init()
         hit_sound = handle
     end
 
-    camera = core.camera(hmm.vec3(0.0, 1.6, 5.5), 0.0, 180.0)
-    projection = hmm.perspective_rh_no(70.0, rgfw.get_width() / rgfw.get_height(), NEAR_PLANE, FAR_PLANE)
+    camera = core.camera(math.vec3(0.0, 1.6, 5.5), 0.0, 180.0)
+    projection = math.perspective_rh_no(70.0, window.get_width() / window.get_height(), NEAR_PLANE, FAR_PLANE)
     draw_options = {
         near_plane = NEAR_PLANE,
-        light_direction_world = hmm.vec3(0.0, -1.0, -1.0),
+        light_direction_world = math.vec3(0.0, -1.0, -1.0),
         ambient_strength = 0.18,
         diffuse_strength = 0.82,
         specular_strength = 0.25,
@@ -327,22 +327,22 @@ function init()
 
     reset_round()
     set_mouse_mode(MOUSE_DISABLED)
-    rgfw.set_exit_key(rgfw.key_escape)
+    window.set_exit_key(window.key_escape)
 end
 
 function update(dt)
-    local mouse_delta = rgfw.get_mouse_vector()
+    local mouse_delta = window.get_mouse_vector()
     local yaw_delta = 0.0
     local pitch_delta = 0.0
 
     last_dt = dt
 
-    if rgfw.is_key_pressed(rgfw.key_escape) then
+    if window.is_key_pressed(window.key_escape) then
         set_mouse_mode(MOUSE_NORMAL)
-        rgfw.close()
+        window.close()
     end
 
-    if rgfw.is_mouse_pressed(rgfw.mouse_left) and mouse_mode == MOUSE_NORMAL then
+    if window.is_mouse_pressed(window.mouse_left) and mouse_mode == MOUSE_NORMAL then
         set_mouse_mode(MOUSE_DISABLED)
     end
 
@@ -353,7 +353,7 @@ function update(dt)
 
     camera:look(yaw_delta, pitch_delta, -70.0, 70.0)
 
-    if rgfw.is_mouse_pressed(rgfw.mouse_left) then
+    if window.is_mouse_pressed(window.mouse_left) then
         handle_shot()
     end
 

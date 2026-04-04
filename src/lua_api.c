@@ -12,6 +12,7 @@
 
 #define LUA_API_MAX_SOUNDS 64
 #define LUA_API_CAMERA_METATABLE "limerence.camera"
+#define LUA_API_ARRAY_COUNT(items) (sizeof(items) / sizeof((items)[0]))
 
 typedef struct {
     bool active;
@@ -33,6 +34,46 @@ typedef struct {
 } Lua_API_State;
 
 static Lua_API_State g_lua_api = {0};
+
+static const char *lua_api_stub_prelude_text =
+    "---@meta\n"
+    "\n"
+    "---@class LimerenceVec2\n"
+    "---@field x number\n"
+    "---@field y number\n"
+    "\n"
+    "---@class LimerenceVec3\n"
+    "---@field x number\n"
+    "---@field y number\n"
+    "---@field z number\n"
+    "\n"
+    "---@class LimerenceVec4\n"
+    "---@field x number\n"
+    "---@field y number\n"
+    "---@field z number\n"
+    "---@field w number\n"
+    "\n"
+    "---@class LimerenceMat4\n"
+    "---@field type string\n"
+    "---@field [integer] number\n"
+    "\n"
+    "---@class LimerenceDrawOptions\n"
+    "---@field near_plane? number\n"
+    "---@field lighting_enabled? boolean\n"
+    "---@field lighting_mode? 'none'|'flat'|'gouraud'\n"
+    "---@field light_direction_world? LimerenceVec3\n"
+    "---@field ambient_strength? number\n"
+    "---@field diffuse_strength? number\n"
+    "---@field specular_strength? number\n"
+    "---@field shininess? number\n"
+    "---@field occlusion_culling? boolean\n"
+    "---@field occlusion_test_step? integer\n"
+    "---@field fog_start? number\n"
+    "---@field fog_end? number\n"
+    "---@field fog_power? number\n"
+    "---@field fog_color? integer\n"
+    "---@field backface_culling? boolean\n"
+    "\n";
 
 static uint32_t lua_api_pack_rgba(int r, int g, int b, int a)
 {
@@ -1146,154 +1187,249 @@ static int lua_api_audio_seek_sound(lua_State *L)
     return 1;
 }
 
-static void lua_api_set_constants(lua_State *L)
+static const char *const lua_api_window_constants[] = {
+    "key_escape",
+    "key_up",
+    "key_down",
+    "key_left",
+    "key_right",
+    "key_w",
+    "key_a",
+    "key_s",
+    "key_d",
+    "key_q",
+    "key_e",
+    "key_space",
+    "key_shift_left",
+    "key_shift_right",
+    "mouse_left",
+    "mouse_right",
+    "mouse_middle",
+};
+
+static const Lua_API_Function_Def lua_api_window_functions[] = {
+    {"get_width", lua_api_rgfw_get_width, "---@return integer\nfunction window.get_width() end\n"},
+    {"get_height", lua_api_rgfw_get_height, "---@return integer\nfunction window.get_height() end\n"},
+    {"should_close", lua_api_rgfw_should_close, "---@return boolean\nfunction window.should_close() end\n"},
+    {"close", lua_api_rgfw_close, "function window.close() end\n"},
+    {"set_exit_key", lua_api_rgfw_set_exit_key, "---@param key integer\nfunction window.set_exit_key(key) end\n"},
+    {"show_mouse", lua_api_rgfw_show_mouse, "---@param visible boolean\nfunction window.show_mouse(visible) end\n"},
+    {"get_mouse_vector", lua_api_rgfw_get_mouse_vector, "---@return LimerenceVec2\nfunction window.get_mouse_vector() end\n"},
+    {"hold_mouse", lua_api_rgfw_hold_mouse, "function window.hold_mouse() end\n"},
+    {"unhold_mouse", lua_api_rgfw_unhold_mouse, "function window.unhold_mouse() end\n"},
+    {"is_key_pressed", lua_api_rgfw_is_key_pressed, "---@param key integer\n---@return boolean\nfunction window.is_key_pressed(key) end\n"},
+    {"is_key_released", lua_api_rgfw_is_key_released, "---@param key integer\n---@return boolean\nfunction window.is_key_released(key) end\n"},
+    {"is_key_down", lua_api_rgfw_is_key_down, "---@param key integer\n---@return boolean\nfunction window.is_key_down(key) end\n"},
+    {"is_mouse_pressed", lua_api_rgfw_is_mouse_pressed, "---@param button integer\n---@return boolean\nfunction window.is_mouse_pressed(button) end\n"},
+    {"is_mouse_released", lua_api_rgfw_is_mouse_released, "---@param button integer\n---@return boolean\nfunction window.is_mouse_released(button) end\n"},
+    {"is_mouse_down", lua_api_rgfw_is_mouse_down, "---@param button integer\n---@return boolean\nfunction window.is_mouse_down(button) end\n"},
+};
+
+static const Lua_API_Function_Def lua_api_graphics_functions[] = {
+    {"rgba", lua_api_graphics_rgba, "---@param r integer\n---@param g integer\n---@param b integer\n---@param a? integer\n---@return integer\nfunction graphics.rgba(r, g, b, a) end\n"},
+    {"get_width", lua_api_graphics_get_width, "---@return integer\nfunction graphics.get_width() end\n"},
+    {"get_height", lua_api_graphics_get_height, "---@return integer\nfunction graphics.get_height() end\n"},
+    {"clear", lua_api_graphics_clear, "---@param color integer\nfunction graphics.clear(color) end\n"},
+    {"rect", lua_api_graphics_rect, "---@param x integer\n---@param y integer\n---@param w integer\n---@param h integer\n---@param color integer\nfunction graphics.rect(x, y, w, h, color) end\n"},
+    {"frame", lua_api_graphics_frame, "---@param x integer\n---@param y integer\n---@param w integer\n---@param h integer\n---@param thickness integer\n---@param color integer\nfunction graphics.frame(x, y, w, h, thickness, color) end\n"},
+    {"circle", lua_api_graphics_circle, "---@param x integer\n---@param y integer\n---@param r integer\n---@param color integer\nfunction graphics.circle(x, y, r, color) end\n"},
+    {"line", lua_api_graphics_line, "---@param x1 integer\n---@param y1 integer\n---@param x2 integer\n---@param y2 integer\n---@param color integer\nfunction graphics.line(x1, y1, x2, y2, color) end\n"},
+    {"triangle", lua_api_graphics_triangle, "---@param x1 integer\n---@param y1 integer\n---@param x2 integer\n---@param y2 integer\n---@param x3 integer\n---@param y3 integer\n---@param color integer\nfunction graphics.triangle(x1, y1, x2, y2, x3, y3, color) end\n"},
+    {"set_pixel", lua_api_graphics_set_pixel, "---@param x integer\n---@param y integer\n---@param color integer\nfunction graphics.set_pixel(x, y, color) end\n"},
+};
+
+static const Lua_API_Function_Def lua_api_core_functions[] = {
+    {"begin_frame", lua_api_core_begin_frame, "---@param clear_color integer\n---@param clear_depth? number\nfunction core.begin_frame(clear_color, clear_depth) end\n"},
+    {"draw_text", lua_api_core_draw_text, "---@param font string\n---@param text string\n---@param x integer\n---@param y integer\n---@param scale integer\n---@param color integer\nfunction core.draw_text(font, text, x, y, scale, color) end\n"},
+    {"draw_model", lua_api_core_draw_model, "---@param model string\n---@param model_matrix LimerenceMat4\n---@param view_matrix LimerenceMat4\n---@param projection_matrix LimerenceMat4\n---@param color integer\n---@param options? LimerenceDrawOptions\nfunction core.draw_model(model, model_matrix, view_matrix, projection_matrix, color, options) end\n"},
+    {"camera", lua_api_camera_new, "---@param position_or_x LimerenceVec3|table|number\n---@param y_or_pitch? number\n---@param z_or_yaw? number\n---@param pitch? number\n---@param yaw? number\n---@return LimerenceCamera\nfunction core.camera(position_or_x, y_or_pitch, z_or_yaw, pitch, yaw) end\n"},
+};
+
+static const Lua_API_Function_Def lua_api_math_functions[] = {
+    {"vec2", lua_api_hmm_vec2, "---@param x number\n---@param y number\n---@return LimerenceVec2\nfunction math.vec2(x, y) end\n"},
+    {"vec3", lua_api_hmm_vec3, "---@param x number\n---@param y number\n---@param z number\n---@return LimerenceVec3\nfunction math.vec3(x, y, z) end\n"},
+    {"vec4", lua_api_hmm_vec4, "---@param x number\n---@param y number\n---@param z number\n---@param w number\n---@return LimerenceVec4\nfunction math.vec4(x, y, z, w) end\n"},
+    {"add3", lua_api_hmm_add3, "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction math.add3(a, b) end\n"},
+    {"sub3", lua_api_hmm_sub3, "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction math.sub3(a, b) end\n"},
+    {"mul3f", lua_api_hmm_mul3f, "---@param value LimerenceVec3\n---@param scalar number\n---@return LimerenceVec3\nfunction math.mul3f(value, scalar) end\n"},
+    {"dot3", lua_api_hmm_dot3, "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return number\nfunction math.dot3(a, b) end\n"},
+    {"cross", lua_api_hmm_cross, "---@param a LimerenceVec3\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction math.cross(a, b) end\n"},
+    {"len3", lua_api_hmm_len3, "---@param value LimerenceVec3\n---@return number\nfunction math.len3(value) end\n"},
+    {"norm3", lua_api_hmm_norm3, "---@param value LimerenceVec3\n---@return LimerenceVec3\nfunction math.norm3(value) end\n"},
+    {"lerp3", lua_api_hmm_lerp3, "---@param a LimerenceVec3\n---@param t number\n---@param b LimerenceVec3\n---@return LimerenceVec3\nfunction math.lerp3(a, t, b) end\n"},
+    {"sin", lua_api_hmm_sin, "---@param value number\n---@return number\nfunction math.sin(value) end\n"},
+    {"cos", lua_api_hmm_cos, "---@param value number\n---@return number\nfunction math.cos(value) end\n"},
+    {"clamp", lua_api_hmm_clamp, "---@param min number\n---@param value number\n---@param max number\n---@return number\nfunction math.clamp(min, value, max) end\n"},
+    {"identity4", lua_api_hmm_identity4, "---@return LimerenceMat4\nfunction math.identity4() end\n"},
+    {"translate", lua_api_hmm_translate, "---@param value LimerenceVec3\n---@return LimerenceMat4\nfunction math.translate(value) end\n"},
+    {"scale", lua_api_hmm_scale, "---@param value LimerenceVec3\n---@return LimerenceMat4\nfunction math.scale(value) end\n"},
+    {"rotate_rh", lua_api_hmm_rotate_rh, "---@param degrees number\n---@param axis LimerenceVec3\n---@return LimerenceMat4\nfunction math.rotate_rh(degrees, axis) end\n"},
+    {"look_at_rh", lua_api_hmm_look_at_rh, "---@param eye LimerenceVec3\n---@param center LimerenceVec3\n---@param up LimerenceVec3\n---@return LimerenceMat4\nfunction math.look_at_rh(eye, center, up) end\n"},
+    {"perspective_rh_no", lua_api_hmm_perspective_rh_no, "---@param fov_degrees number\n---@param aspect number\n---@param near_plane number\n---@param far_plane number\n---@return LimerenceMat4\nfunction math.perspective_rh_no(fov_degrees, aspect, near_plane, far_plane) end\n"},
+    {"mul_m4", lua_api_hmm_mul_m4, "---@param a LimerenceMat4\n---@param b LimerenceMat4\n---@return LimerenceMat4\nfunction math.mul_m4(a, b) end\n"},
+    {"transform_point", lua_api_hmm_transform_point, "---@param matrix LimerenceMat4\n---@param point LimerenceVec3\n---@return LimerenceVec3\nfunction math.transform_point(matrix, point) end\n"},
+    {"transform_vector", lua_api_hmm_transform_vector, "---@param matrix LimerenceMat4\n---@param vector LimerenceVec3\n---@return LimerenceVec3\nfunction math.transform_vector(matrix, vector) end\n"},
+};
+
+static const Lua_API_Function_Def lua_api_audio_functions[] = {
+    {"init", lua_api_audio_init, "---@return boolean ok, string? err\nfunction audio.init() end\n"},
+    {"shutdown", lua_api_audio_shutdown, "function audio.shutdown() end\n"},
+    {"is_ready", lua_api_audio_is_ready, "---@return boolean\nfunction audio.is_ready() end\n"},
+    {"set_master_volume", lua_api_audio_set_master_volume, "---@param volume number\nfunction audio.set_master_volume(volume) end\n"},
+    {"play", lua_api_audio_play, "---@param path string\n---@return boolean ok, string? err\nfunction audio.play(path) end\n"},
+    {"load_sound", lua_api_audio_load_sound, "---@param path string\n---@return integer? handle, string? err\nfunction audio.load_sound(path) end\n"},
+    {"unload_sound", lua_api_audio_unload_sound, "---@param handle integer\nfunction audio.unload_sound(handle) end\n"},
+    {"start", lua_api_audio_start_sound, "---@param handle integer\n---@return boolean ok, string? err\nfunction audio.start(handle) end\n"},
+    {"stop", lua_api_audio_stop_sound, "---@param handle integer\n---@return boolean ok, string? err\nfunction audio.stop(handle) end\n"},
+    {"set_volume", lua_api_audio_set_sound_volume, "---@param handle integer\n---@param volume number\nfunction audio.set_volume(handle, volume) end\n"},
+    {"set_pitch", lua_api_audio_set_sound_pitch, "---@param handle integer\n---@param pitch number\nfunction audio.set_pitch(handle, pitch) end\n"},
+    {"set_pan", lua_api_audio_set_sound_pan, "---@param handle integer\n---@param pan number\nfunction audio.set_pan(handle, pan) end\n"},
+    {"set_looping", lua_api_audio_set_sound_looping, "---@param handle integer\n---@param looping boolean\nfunction audio.set_looping(handle, looping) end\n"},
+    {"is_playing", lua_api_audio_is_sound_playing, "---@param handle integer\n---@return boolean\nfunction audio.is_playing(handle) end\n"},
+    {"at_end", lua_api_audio_sound_at_end, "---@param handle integer\n---@return boolean\nfunction audio.at_end(handle) end\n"},
+    {"seek", lua_api_audio_seek_sound, "---@param handle integer\n---@param seconds number\n---@return boolean ok, string? err\nfunction audio.seek(handle, seconds) end\n"},
+};
+
+static const Lua_API_Function_Def lua_api_camera_methods[] = {
+    {"get_position", lua_api_camera_get_position, "---@return LimerenceVec3\nfunction LimerenceCamera:get_position() end\n"},
+    {"set_position", lua_api_camera_set_position, "---@param position LimerenceVec3\nfunction LimerenceCamera:set_position(position) end\n"},
+    {"get_pitch", lua_api_camera_get_pitch, "---@return number\nfunction LimerenceCamera:get_pitch() end\n"},
+    {"set_pitch", lua_api_camera_set_pitch, "---@param pitch number\nfunction LimerenceCamera:set_pitch(pitch) end\n"},
+    {"get_yaw", lua_api_camera_get_yaw, "---@return number\nfunction LimerenceCamera:get_yaw() end\n"},
+    {"set_yaw", lua_api_camera_set_yaw, "---@param yaw number\nfunction LimerenceCamera:set_yaw(yaw) end\n"},
+    {"look", lua_api_camera_look, "---@param yaw_delta number\n---@param pitch_delta number\n---@param pitch_min? number\n---@param pitch_max? number\nfunction LimerenceCamera:look(yaw_delta, pitch_delta, pitch_min, pitch_max) end\n"},
+    {"move", lua_api_camera_move, "---@param forward_distance number\n---@param strafe_distance number\n---@param vertical_distance number\nfunction LimerenceCamera:move(forward_distance, strafe_distance, vertical_distance) end\n"},
+    {"forward", lua_api_camera_forward, "---@return LimerenceVec3\nfunction LimerenceCamera:forward() end\n"},
+    {"flat_forward", lua_api_camera_flat_forward, "---@return LimerenceVec3\nfunction LimerenceCamera:flat_forward() end\n"},
+    {"right", lua_api_camera_right, "---@return LimerenceVec3\nfunction LimerenceCamera:right() end\n"},
+    {"view", lua_api_camera_view, "---@return LimerenceMat4\nfunction LimerenceCamera:view() end\n"},
+};
+
+static const Lua_API_Module_Def lua_api_modules[] = {
+    {
+        "window",
+        "LimerenceWindow",
+        lua_api_window_functions,
+        LUA_API_ARRAY_COUNT(lua_api_window_functions),
+        lua_api_window_constants,
+        LUA_API_ARRAY_COUNT(lua_api_window_constants),
+    },
+    {
+        "graphics",
+        "LimerenceGraphics",
+        lua_api_graphics_functions,
+        LUA_API_ARRAY_COUNT(lua_api_graphics_functions),
+        NULL,
+        0,
+    },
+    {
+        "core",
+        "LimerenceCore",
+        lua_api_core_functions,
+        LUA_API_ARRAY_COUNT(lua_api_core_functions),
+        NULL,
+        0,
+    },
+    {
+        "math",
+        "LimerenceMath",
+        lua_api_math_functions,
+        LUA_API_ARRAY_COUNT(lua_api_math_functions),
+        NULL,
+        0,
+    },
+    {
+        "audio",
+        "LimerenceAudio",
+        lua_api_audio_functions,
+        LUA_API_ARRAY_COUNT(lua_api_audio_functions),
+        NULL,
+        0,
+    },
+};
+
+static const Lua_API_Class_Def lua_api_classes[] = {
+    {
+        "LimerenceCamera",
+        lua_api_camera_methods,
+        LUA_API_ARRAY_COUNT(lua_api_camera_methods),
+    },
+};
+
+static const Lua_API_Global_Def lua_api_globals[] = {
+    {"hello_world", lua_api_hello_world, "function hello_world() end\n"},
+};
+
+static void lua_api_set_window_constants(lua_State *L)
 {
-    lua_pushinteger(L, RGFW_escape);
-    lua_setfield(L, -2, "key_escape");
-    lua_pushinteger(L, RGFW_up);
-    lua_setfield(L, -2, "key_up");
-    lua_pushinteger(L, RGFW_down);
-    lua_setfield(L, -2, "key_down");
-    lua_pushinteger(L, RGFW_left);
-    lua_setfield(L, -2, "key_left");
-    lua_pushinteger(L, RGFW_right);
-    lua_setfield(L, -2, "key_right");
-    lua_pushinteger(L, RGFW_w);
-    lua_setfield(L, -2, "key_w");
-    lua_pushinteger(L, RGFW_a);
-    lua_setfield(L, -2, "key_a");
-    lua_pushinteger(L, RGFW_s);
-    lua_setfield(L, -2, "key_s");
-    lua_pushinteger(L, RGFW_d);
-    lua_setfield(L, -2, "key_d");
-    lua_pushinteger(L, RGFW_q);
-    lua_setfield(L, -2, "key_q");
-    lua_pushinteger(L, RGFW_e);
-    lua_setfield(L, -2, "key_e");
-    lua_pushinteger(L, RGFW_space);
-    lua_setfield(L, -2, "key_space");
-    lua_pushinteger(L, RGFW_shiftL);
-    lua_setfield(L, -2, "key_shift_left");
-    lua_pushinteger(L, RGFW_shiftR);
-    lua_setfield(L, -2, "key_shift_right");
-    lua_pushinteger(L, RGFW_mouseLeft);
-    lua_setfield(L, -2, "mouse_left");
-    lua_pushinteger(L, RGFW_mouseRight);
-    lua_setfield(L, -2, "mouse_right");
-    lua_pushinteger(L, RGFW_mouseMiddle);
-    lua_setfield(L, -2, "mouse_middle");
+    static const lua_Integer lua_api_window_constant_values[] = {
+        RGFW_escape,
+        RGFW_up,
+        RGFW_down,
+        RGFW_left,
+        RGFW_right,
+        RGFW_w,
+        RGFW_a,
+        RGFW_s,
+        RGFW_d,
+        RGFW_q,
+        RGFW_e,
+        RGFW_space,
+        RGFW_shiftL,
+        RGFW_shiftR,
+        RGFW_mouseLeft,
+        RGFW_mouseRight,
+        RGFW_mouseMiddle,
+    };
+
+    for (size_t i = 0; i < LUA_API_ARRAY_COUNT(lua_api_window_constants); ++i) {
+        lua_pushinteger(L, lua_api_window_constant_values[i]);
+        lua_setfield(L, -2, lua_api_window_constants[i]);
+    }
 }
 
-static void lua_api_register_module(lua_State *L, const char *name, const luaL_Reg *functions)
+static void lua_api_set_module_constants(lua_State *L, const Lua_API_Module_Def *module)
 {
-    lua_newtable(L);
-    luaL_setfuncs(L, functions, 0);
-    if (strcmp(name, "rgfw") == 0) {
-        lua_api_set_constants(L);
+    if (strcmp(module->module_name, "window") == 0) {
+        lua_api_set_window_constants(L);
     }
-    lua_setglobal(L, name);
+}
+
+static void lua_api_register_module(lua_State *L, const Lua_API_Module_Def *module)
+{
+    lua_getglobal(L, module->module_name);
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        lua_newtable(L);
+    }
+    for (size_t i = 0; i < module->function_count; ++i) {
+        lua_pushcfunction(L, module->functions[i].function);
+        lua_setfield(L, -2, module->functions[i].name);
+    }
+    lua_api_set_module_constants(L, module);
+    lua_setglobal(L, module->module_name);
+}
+
+static void lua_api_register_class(lua_State *L, const Lua_API_Class_Def *class_def)
+{
+    luaL_newmetatable(L, LUA_API_CAMERA_METATABLE);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    for (size_t i = 0; i < class_def->method_count; ++i) {
+        lua_pushcfunction(L, class_def->methods[i].function);
+        lua_setfield(L, -2, class_def->methods[i].name);
+    }
+    lua_pop(L, 1);
+}
+
+static void lua_api_register_global(lua_State *L, const Lua_API_Global_Def *global)
+{
+    lua_pushcfunction(L, global->function);
+    lua_setglobal(L, global->name);
 }
 
 bool lua_api_init(const Lua_API_Context *context)
 {
-    static const luaL_Reg rgfw_functions[] = {
-        {"get_width", lua_api_rgfw_get_width},
-        {"get_height", lua_api_rgfw_get_height},
-        {"should_close", lua_api_rgfw_should_close},
-        {"close", lua_api_rgfw_close},
-        {"set_exit_key", lua_api_rgfw_set_exit_key},
-        {"show_mouse", lua_api_rgfw_show_mouse},
-        {"get_mouse_vector", lua_api_rgfw_get_mouse_vector},
-        {"hold_mouse", lua_api_rgfw_hold_mouse},
-        {"unhold_mouse", lua_api_rgfw_unhold_mouse},
-        {"is_key_pressed", lua_api_rgfw_is_key_pressed},
-        {"is_key_released", lua_api_rgfw_is_key_released},
-        {"is_key_down", lua_api_rgfw_is_key_down},
-        {"is_mouse_pressed", lua_api_rgfw_is_mouse_pressed},
-        {"is_mouse_released", lua_api_rgfw_is_mouse_released},
-        {"is_mouse_down", lua_api_rgfw_is_mouse_down},
-        {0},
-    };
-    static const luaL_Reg graphics_functions[] = {
-        {"rgba", lua_api_graphics_rgba},
-        {"get_width", lua_api_graphics_get_width},
-        {"get_height", lua_api_graphics_get_height},
-        {"clear", lua_api_graphics_clear},
-        {"rect", lua_api_graphics_rect},
-        {"frame", lua_api_graphics_frame},
-        {"circle", lua_api_graphics_circle},
-        {"line", lua_api_graphics_line},
-        {"triangle", lua_api_graphics_triangle},
-        {"set_pixel", lua_api_graphics_set_pixel},
-        {0},
-    };
-    static const luaL_Reg core_functions[] = {
-        {"begin_frame", lua_api_core_begin_frame},
-        {"draw_text", lua_api_core_draw_text},
-        {"draw_model", lua_api_core_draw_model},
-        {"camera", lua_api_camera_new},
-        {0},
-    };
-    static const luaL_Reg hmm_functions[] = {
-        {"vec2", lua_api_hmm_vec2},
-        {"vec3", lua_api_hmm_vec3},
-        {"vec4", lua_api_hmm_vec4},
-        {"add3", lua_api_hmm_add3},
-        {"sub3", lua_api_hmm_sub3},
-        {"mul3f", lua_api_hmm_mul3f},
-        {"dot3", lua_api_hmm_dot3},
-        {"cross", lua_api_hmm_cross},
-        {"len3", lua_api_hmm_len3},
-        {"norm3", lua_api_hmm_norm3},
-        {"lerp3", lua_api_hmm_lerp3},
-        {"sin", lua_api_hmm_sin},
-        {"cos", lua_api_hmm_cos},
-        {"clamp", lua_api_hmm_clamp},
-        {"identity4", lua_api_hmm_identity4},
-        {"translate", lua_api_hmm_translate},
-        {"scale", lua_api_hmm_scale},
-        {"rotate_rh", lua_api_hmm_rotate_rh},
-        {"look_at_rh", lua_api_hmm_look_at_rh},
-        {"perspective_rh_no", lua_api_hmm_perspective_rh_no},
-        {"mul_m4", lua_api_hmm_mul_m4},
-        {"transform_point", lua_api_hmm_transform_point},
-        {"transform_vector", lua_api_hmm_transform_vector},
-        {0},
-    };
-    static const luaL_Reg audio_functions[] = {
-        {"init", lua_api_audio_init},
-        {"shutdown", lua_api_audio_shutdown},
-        {"is_ready", lua_api_audio_is_ready},
-        {"set_master_volume", lua_api_audio_set_master_volume},
-        {"play", lua_api_audio_play},
-        {"load_sound", lua_api_audio_load_sound},
-        {"unload_sound", lua_api_audio_unload_sound},
-        {"start", lua_api_audio_start_sound},
-        {"stop", lua_api_audio_stop_sound},
-        {"set_volume", lua_api_audio_set_sound_volume},
-        {"set_pitch", lua_api_audio_set_sound_pitch},
-        {"set_pan", lua_api_audio_set_sound_pan},
-        {"set_looping", lua_api_audio_set_sound_looping},
-        {"is_playing", lua_api_audio_is_sound_playing},
-        {"at_end", lua_api_audio_sound_at_end},
-        {"seek", lua_api_audio_seek_sound},
-        {0},
-    };
-    static const luaL_Reg camera_methods[] = {
-        {"get_position", lua_api_camera_get_position},
-        {"set_position", lua_api_camera_set_position},
-        {"get_pitch", lua_api_camera_get_pitch},
-        {"set_pitch", lua_api_camera_set_pitch},
-        {"get_yaw", lua_api_camera_get_yaw},
-        {"set_yaw", lua_api_camera_set_yaw},
-        {"look", lua_api_camera_look},
-        {"move", lua_api_camera_move},
-        {"forward", lua_api_camera_forward},
-        {"flat_forward", lua_api_camera_flat_forward},
-        {"right", lua_api_camera_right},
-        {"view", lua_api_camera_view},
-        {0},
-    };
 
     if (context == NULL) {
         fputs("lua_api_init: context is NULL\n", stderr);
@@ -1311,18 +1447,15 @@ bool lua_api_init(const Lua_API_Context *context)
     }
 
     luaL_openlibs(g_lua_api.state);
-    luaL_newmetatable(g_lua_api.state, LUA_API_CAMERA_METATABLE);
-    lua_pushvalue(g_lua_api.state, -1);
-    lua_setfield(g_lua_api.state, -2, "__index");
-    luaL_setfuncs(g_lua_api.state, camera_methods, 0);
-    lua_pop(g_lua_api.state, 1);
-    lua_pushcfunction(g_lua_api.state, lua_api_hello_world);
-    lua_setglobal(g_lua_api.state, "hello_world");
-    lua_api_register_module(g_lua_api.state, "window", rgfw_functions);
-    lua_api_register_module(g_lua_api.state, "graphics", graphics_functions);
-    lua_api_register_module(g_lua_api.state, "core", core_functions);
-    lua_api_register_module(g_lua_api.state, "math", hmm_functions);
-    lua_api_register_module(g_lua_api.state, "audio", audio_functions);
+    for (size_t i = 0; i < LUA_API_ARRAY_COUNT(lua_api_classes); ++i) {
+        lua_api_register_class(g_lua_api.state, &lua_api_classes[i]);
+    }
+    for (size_t i = 0; i < LUA_API_ARRAY_COUNT(lua_api_globals); ++i) {
+        lua_api_register_global(g_lua_api.state, &lua_api_globals[i]);
+    }
+    for (size_t i = 0; i < LUA_API_ARRAY_COUNT(lua_api_modules); ++i) {
+        lua_api_register_module(g_lua_api.state, &lua_api_modules[i]);
+    }
 
     return true;
 }
@@ -1349,6 +1482,53 @@ void lua_api_set_mouse_vector(float x, float y)
 {
     g_lua_api.mouse_vector_x = x;
     g_lua_api.mouse_vector_y = y;
+}
+
+const char *lua_api_stub_prelude(void)
+{
+    return lua_api_stub_prelude_text;
+}
+
+size_t lua_api_module_count(void)
+{
+    return LUA_API_ARRAY_COUNT(lua_api_modules);
+}
+
+const Lua_API_Module_Def *lua_api_module_def(size_t index)
+{
+    if (index >= LUA_API_ARRAY_COUNT(lua_api_modules)) {
+        return NULL;
+    }
+
+    return &lua_api_modules[index];
+}
+
+size_t lua_api_class_count(void)
+{
+    return LUA_API_ARRAY_COUNT(lua_api_classes);
+}
+
+const Lua_API_Class_Def *lua_api_class_def(size_t index)
+{
+    if (index >= LUA_API_ARRAY_COUNT(lua_api_classes)) {
+        return NULL;
+    }
+
+    return &lua_api_classes[index];
+}
+
+size_t lua_api_global_count(void)
+{
+    return LUA_API_ARRAY_COUNT(lua_api_globals);
+}
+
+const Lua_API_Global_Def *lua_api_global_def(size_t index)
+{
+    if (index >= LUA_API_ARRAY_COUNT(lua_api_globals)) {
+        return NULL;
+    }
+
+    return &lua_api_globals[index];
 }
 
 static bool lua_api_report_call_status(int status)

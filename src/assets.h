@@ -147,9 +147,9 @@ Assets_Status assets_compile_font_to_c(const char *input_path, const char *outpu
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "third_party/stb_image.h"
+#include "../third_party/stb_image.h"
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "third_party/stb_truetype.h"
+#include "../third_party/stb_truetype.h"
 
 #define ASSETS_ARRAY_APPEND(array, array_count, array_capacity, value, error_ptr) \
     do {                                                                           \
