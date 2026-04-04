@@ -1,7 +1,6 @@
 # Limerence3D
 
-<!-- Example GIF goes here -->
-<!-- Suggested placement: a short capture of examples/aim_trainer or examples/basic_scene -->
+![Aim Trainer Example](assets/output.gif)
 
 Limerence3D is a small 3D engine with a Lua frontend inspired by [LÖVE 2D](https://github.com/love2d/love). It provides a simple project layout, a lightweight command-line workflow, software-rendered 3D drawing, input, math helpers, and audio playback for Lua projects.
 
