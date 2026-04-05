@@ -19,24 +19,22 @@ jobs:
           - id: windows-x64
             os: windows-latest
             archive_name: limerence-windows-x64.zip
-            output_name: limerence.exe
           - id: linux-x64
             os: ubuntu-latest
             archive_name: limerence-linux-x64.tar.gz
-            output_name: limerence
           - id: macos-arm64
             os: macos-latest
             archive_name: limerence-macos-arm64.zip
-            output_name: limerence
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Linux build dependencies
         if: matrix.id == 'linux-x64'
+        shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libx11-dev libxi-dev libxrandr-dev libxcursor-dev libxext-dev
+          sudo apt-get install -y build-essential xorg-dev
 
       - name: Install MSYS2 toolchain
         if: matrix.id == 'windows-x64'
@@ -44,8 +42,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: >-
-            mingw-w64-x86_64-gcc
+          install: mingw-w64-x86_64-gcc
 
       - name: Build nob
         if: matrix.id != 'windows-x64'
@@ -87,8 +84,9 @@ jobs:
         shell: bash
         run: tar -czf "${{ matrix.archive_name }}" limerence
 
-      - name: Assert macOS signing secrets exist
+      - name: Check macOS signing secrets
         if: matrix.id == 'macos-arm64'
+        id: macos_secrets
         shell: bash
         env:
           APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
@@ -98,6 +96,7 @@ jobs:
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
         run: |
+          ready=true
           for name in \
             APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 \
             APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD \
@@ -107,37 +106,25 @@ jobs:
             APPLE_NOTARY_APP_PASSWORD
           do
             if [ -z "${!name}" ]; then
-              echo "Missing required secret: $name" >&2
-              exit 1
+              echo "Missing secret: $name"
+              ready=false
             fi
           done
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
 
-      - name: Package, sign, and notarize macOS app
+      - name: Require macOS signing secrets for published releases
+        if: matrix.id == 'macos-arm64' && github.event_name == 'release' && steps.macos_secrets.outputs.ready != 'true'
+        shell: bash
+        run: |
+          echo "Published releases require Apple signing and notarization secrets." >&2
+          exit 1
+
+      - name: Build macOS app bundle
         if: matrix.id == 'macos-arm64'
         shell: bash
-        env:
-          APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
-          APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
-          APPLE_DEVELOPER_IDENTITY: ${{ secrets.APPLE_DEVELOPER_IDENTITY }}
-          APPLE_DEVELOPER_TEAM_ID: ${{ secrets.APPLE_DEVELOPER_TEAM_ID }}
-          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
         run: |
           APP_NAME="Limerence"
           APP_DIR="$APP_NAME.app"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
-          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
-
-          echo "$APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security default-keychain -s "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
           mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
           cp limerence "$APP_DIR/Contents/MacOS/limerence"
           chmod +x "$APP_DIR/Contents/MacOS/limerence"
@@ -171,6 +158,32 @@ jobs:
           </plist>
           PLIST
 
+      - name: Sign and notarize macOS app
+        if: matrix.id == 'macos-arm64' && steps.macos_secrets.outputs.ready == 'true'
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
+          APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
+          APPLE_DEVELOPER_IDENTITY: ${{ secrets.APPLE_DEVELOPER_IDENTITY }}
+          APPLE_DEVELOPER_TEAM_ID: ${{ secrets.APPLE_DEVELOPER_TEAM_ID }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+        run: |
+          APP_NAME="Limerence"
+          APP_DIR="$APP_NAME.app"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+
+          echo "$APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
           codesign --force --deep --options runtime --timestamp --sign "$APPLE_DEVELOPER_IDENTITY" "$APP_DIR"
           codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
@@ -185,6 +198,14 @@ jobs:
           spctl -a -vvv -t exec "$APP_DIR"
 
           rm -f "${{ matrix.archive_name }}"
+          ditto -c -k --keepParent "$APP_DIR" "${{ matrix.archive_name }}"
+
+      - name: Package unsigned macOS app for manual runs
+        if: matrix.id == 'macos-arm64' && steps.macos_secrets.outputs.ready != 'true' && github.event_name != 'release'
+        shell: bash
+        run: |
+          APP_NAME="Limerence"
+          APP_DIR="$APP_NAME.app"
           ditto -c -k --keepParent "$APP_DIR" "${{ matrix.archive_name }}"
 
       - name: Upload packaged release artifact
