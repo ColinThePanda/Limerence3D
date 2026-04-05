@@ -202,20 +202,20 @@ jobs:
           rm -f "${{ matrix.asset_name }}"
           ditto -c -k --keepParent "$APP_DIR" "${{ matrix.asset_name }}"
 
-      - name: Package unsigned macOS app for manual runs
-        if: matrix.id == 'macos-arm64' && steps.macos_secrets.outputs.ready != 'true' && github.event_name != 'release'
-        shell: bash
-        run: |
-          APP_NAME="Limerence"
-          APP_DIR="$APP_NAME.app"
-          ditto -c -k --keepParent "$APP_DIR" "${{ matrix.asset_name }}"
-
       - name: Upload packaged release artifact
-        if: github.event_name != 'release'
+        if: github.event_name != 'release' && matrix.id != 'macos-arm64'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.asset_name }}
+          if-no-files-found: error
+
+      - name: Upload macOS app artifact for manual runs
+        if: github.event_name != 'release' && matrix.id == 'macos-arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: limerence-macos-arm64-app
+          path: Limerence.app
           if-no-files-found: error
 
       - name: Upload packaged file to GitHub Release
