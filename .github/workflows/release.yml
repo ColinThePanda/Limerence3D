@@ -18,13 +18,13 @@ jobs:
         include:
           - id: windows-x64
             os: windows-latest
-            archive_name: limerence-windows-x64.zip
+            asset_name: limerence-windows-x64.exe
           - id: linux-x64
             os: ubuntu-latest
-            archive_name: limerence-linux-x64.tar.gz
+            asset_name: limerence-linux-x64
           - id: macos-arm64
             os: macos-latest
-            archive_name: limerence-macos-arm64.zip
+            asset_name: limerence-macos-arm64.zip
 
     steps:
       - uses: actions/checkout@v4
@@ -74,15 +74,17 @@ jobs:
         shell: msys2 {0}
         run: ./limerence.exe export examples/basic_scene
 
-      - name: Package Windows release
+      - name: Prepare Windows release asset
         if: matrix.id == 'windows-x64'
         shell: powershell
-        run: Compress-Archive -Path limerence.exe -DestinationPath ${{ matrix.archive_name }}
+        run: Copy-Item limerence.exe "${{ matrix.asset_name }}"
 
-      - name: Package Linux release
+      - name: Prepare Linux release asset
         if: matrix.id == 'linux-x64'
         shell: bash
-        run: tar -czf "${{ matrix.archive_name }}" limerence
+        run: |
+          cp limerence "${{ matrix.asset_name }}"
+          chmod +x "${{ matrix.asset_name }}"
 
       - name: Check macOS signing secrets
         if: matrix.id == 'macos-arm64'
@@ -187,8 +189,8 @@ jobs:
           codesign --force --deep --options runtime --timestamp --sign "$APPLE_DEVELOPER_IDENTITY" "$APP_DIR"
           codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 
-          ditto -c -k --keepParent "$APP_DIR" "$RUNNER_TEMP/${{ matrix.archive_name }}"
-          xcrun notarytool submit "$RUNNER_TEMP/${{ matrix.archive_name }}" \
+          ditto -c -k --keepParent "$APP_DIR" "$RUNNER_TEMP/${{ matrix.asset_name }}"
+          xcrun notarytool submit "$RUNNER_TEMP/${{ matrix.asset_name }}" \
             --apple-id "$APPLE_NOTARY_APPLE_ID" \
             --team-id "$APPLE_DEVELOPER_TEAM_ID" \
             --password "$APPLE_NOTARY_APP_PASSWORD" \
@@ -197,8 +199,8 @@ jobs:
           xcrun stapler staple "$APP_DIR"
           spctl -a -vvv -t exec "$APP_DIR"
 
-          rm -f "${{ matrix.archive_name }}"
-          ditto -c -k --keepParent "$APP_DIR" "${{ matrix.archive_name }}"
+          rm -f "${{ matrix.asset_name }}"
+          ditto -c -k --keepParent "$APP_DIR" "${{ matrix.asset_name }}"
 
       - name: Package unsigned macOS app for manual runs
         if: matrix.id == 'macos-arm64' && steps.macos_secrets.outputs.ready != 'true' && github.event_name != 'release'
@@ -206,14 +208,14 @@ jobs:
         run: |
           APP_NAME="Limerence"
           APP_DIR="$APP_NAME.app"
-          ditto -c -k --keepParent "$APP_DIR" "${{ matrix.archive_name }}"
+          ditto -c -k --keepParent "$APP_DIR" "${{ matrix.asset_name }}"
 
       - name: Upload packaged release artifact
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.archive_name }}
-          path: ${{ matrix.archive_name }}
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
           if-no-files-found: error
 
       - name: Upload packaged file to GitHub Release
@@ -222,4 +224,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG_NAME" "${{ matrix.archive_name }}" --clobber
+        run: gh release upload "$TAG_NAME" "${{ matrix.asset_name }}" --clobber
