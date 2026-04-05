@@ -153,7 +153,7 @@ function init()
         assert(ok, err)
     end
     do
-        local handle, err = audio.load_sound("assets/Duvet.mp3")
+        local handle, err = audio.load_sound("Duvet")
         assert(handle, err)
         music = handle
     end

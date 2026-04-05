@@ -7,6 +7,7 @@ typedef enum {
     ASSETS_RUNTIME_TYPE_MODEL = 1,
     ASSETS_RUNTIME_TYPE_IMAGE = 2,
     ASSETS_RUNTIME_TYPE_FONT = 3,
+    ASSETS_RUNTIME_TYPE_AUDIO = 4,
 } Assets_Runtime_Type;
 
 typedef struct {
@@ -25,6 +26,17 @@ typedef struct {
 } Assets_Runtime_Font_Entry;
 
 typedef struct {
+    const char *name;
+    const unsigned char *data;
+    size_t data_size;
+} Assets_Runtime_Audio;
+
+typedef struct {
+    const char *name;
+    Assets_Runtime_Audio asset;
+} Assets_Runtime_Audio_Entry;
+
+typedef struct {
     unsigned char *pack_data;
     size_t pack_size;
     Assets_Runtime_Model_Entry *models;
@@ -33,13 +45,17 @@ typedef struct {
     size_t image_count;
     Assets_Runtime_Font_Entry *fonts;
     size_t font_count;
+    Assets_Runtime_Audio_Entry *audios;
+    size_t audio_count;
 } Assets_Runtime_Registry;
 
 Assets_Status assets_build_pack_from_dir(const char *assets_dir, const char *output_path, Assets_Error *error);
+Assets_Status assets_build_empty_pack(const char *output_path, Assets_Error *error);
 Assets_Status assets_runtime_load_pack(const char *path, Assets_Runtime_Registry *out, Assets_Error *error);
 void assets_runtime_unload(Assets_Runtime_Registry *registry);
 const Assets_Model *assets_runtime_find_model(const Assets_Runtime_Registry *registry, const char *name);
 const Assets_Image *assets_runtime_find_image(const Assets_Runtime_Registry *registry, const char *name);
 const Assets_Font *assets_runtime_find_font(const Assets_Runtime_Registry *registry, const char *name);
+const Assets_Runtime_Audio *assets_runtime_find_audio(const Assets_Runtime_Registry *registry, const char *name);
 
 #endif

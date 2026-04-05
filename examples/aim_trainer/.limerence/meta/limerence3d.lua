@@ -176,6 +176,13 @@ function graphics.triangle(x1, y1, x2, y2, x3, y3, color) end
 ---@param y integer
 ---@param color integer
 function graphics.set_pixel(x, y, color) end
+---@param image string
+---@param x integer
+---@param y integer
+---@param width? integer
+---@param height? integer
+---@param mode? 'blend'|'copy'|'copy_bilinear'
+function graphics.draw_image(image, x, y, width, height, mode) end
 
 ---@class LimerenceCore
 core = {}
@@ -311,12 +318,12 @@ function audio.shutdown() end
 function audio.is_ready() end
 ---@param volume number
 function audio.set_master_volume(volume) end
----@param path string
+---@param name_or_path string
 ---@return boolean ok, string? err
-function audio.play(path) end
----@param path string
+function audio.play(name_or_path) end
+---@param name_or_path string
 ---@return integer? handle, string? err
-function audio.load_sound(path) end
+function audio.load_sound(name_or_path) end
 ---@param handle integer
 function audio.unload_sound(handle) end
 ---@param handle integer

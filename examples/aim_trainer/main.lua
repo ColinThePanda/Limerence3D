@@ -294,12 +294,12 @@ function init()
         assert(ok, err)
     end
     do
-        local handle, err = audio.load_sound("assets/gunshot.mp3")
+        local handle, err = audio.load_sound("gunshot")
         assert(handle, err)
         shot_sound = handle
     end
     do
-        local handle, err = audio.load_sound("assets/hit.mp3")
+        local handle, err = audio.load_sound("hit")
         assert(handle, err)
         hit_sound = handle
     end

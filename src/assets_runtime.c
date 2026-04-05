@@ -99,6 +99,12 @@ typedef struct {
     size_t capacity;
 } Assets_Runtime_Font_Entries;
 
+typedef struct {
+    Assets_Runtime_Audio_Entry *items;
+    size_t count;
+    size_t capacity;
+} Assets_Runtime_Audio_Entries;
+
 static const char assets_pack_magic[ASSETS_PACK_MAGIC_SIZE] = {'L', '3', 'D', 'P', 'A', 'C', 'K', '\0'};
 
 static void assets_runtime_clear_error(Assets_Error *error)
@@ -329,6 +335,10 @@ static Assets_Runtime_Type assets_runtime_type_from_path(const char *path)
     if (strcmp(ext, ".jpg") == 0) return ASSETS_RUNTIME_TYPE_IMAGE;
     if (strcmp(ext, ".jpeg") == 0) return ASSETS_RUNTIME_TYPE_IMAGE;
     if (strcmp(ext, ".ttf") == 0) return ASSETS_RUNTIME_TYPE_FONT;
+    if (strcmp(ext, ".wav") == 0) return ASSETS_RUNTIME_TYPE_AUDIO;
+    if (strcmp(ext, ".mp3") == 0) return ASSETS_RUNTIME_TYPE_AUDIO;
+    if (strcmp(ext, ".flac") == 0) return ASSETS_RUNTIME_TYPE_AUDIO;
+    if (strcmp(ext, ".ogg") == 0) return ASSETS_RUNTIME_TYPE_AUDIO;
     return 0;
 }
 
@@ -603,6 +613,15 @@ static bool assets_runtime_build_asset(const char *source_path, const char *rela
         }
         ok = assets_runtime_append_payload(pack, type, asset_name, payload.items, payload.count, error);
         assets_free_font(&font);
+        goto defer;
+    }
+
+    if (type == ASSETS_RUNTIME_TYPE_AUDIO) {
+        if (!nob_read_entire_file(source_path, &payload)) {
+            assets_runtime_errorf(error, source_path, 0, "Could not read audio file");
+            goto defer;
+        }
+        ok = assets_runtime_append_payload(pack, type, asset_name, payload.items, payload.count, error);
     }
 
 defer:
@@ -743,6 +762,31 @@ defer:
     free(pack.entries);
     free(pack.string_table.items);
     free(pack.payloads.items);
+    return status;
+}
+
+Assets_Status assets_build_empty_pack(const char *output_path, Assets_Error *error)
+{
+    Assets_Status status = ASSETS_STATUS_ERROR;
+    Nob_String_Builder string_table = {0};
+    Nob_String_Builder payloads = {0};
+
+    assets_runtime_clear_error(error);
+
+    if (!assets_runtime_is_little_endian()) {
+        assets_runtime_errorf(error, output_path, 0, "Asset pack building currently requires a little-endian machine");
+        goto defer;
+    }
+    if (!assets_runtime_mkdirs(temp_dir_name(output_path), error)) goto defer;
+    if (!assets_runtime_finalize_pack(NULL, 0, &string_table, &payloads, output_path, error)) {
+        goto defer;
+    }
+
+    status = ASSETS_STATUS_OK;
+
+defer:
+    free(string_table.items);
+    free(payloads.items);
     return status;
 }
 
@@ -957,6 +1001,29 @@ static bool assets_runtime_parse_font(
     return true;
 }
 
+static bool assets_runtime_parse_audio(
+    const unsigned char *payload,
+    size_t payload_size,
+    const char *name,
+    Assets_Runtime_Audio_Entries *audios,
+    Assets_Error *error,
+    const char *path
+)
+{
+    Assets_Runtime_Audio_Entry entry = {0};
+
+    (void)error;
+    (void)path;
+
+    entry.name = name;
+    entry.asset.name = name;
+    entry.asset.data = payload;
+    entry.asset.data_size = payload_size;
+
+    nob_da_append(audios, entry);
+    return true;
+}
+
 Assets_Status assets_runtime_load_pack(const char *path, Assets_Runtime_Registry *out, Assets_Error *error)
 {
     Nob_String_Builder file = {0};
@@ -964,6 +1031,7 @@ Assets_Status assets_runtime_load_pack(const char *path, Assets_Runtime_Registry
     Assets_Runtime_Model_Entries models = {0};
     Assets_Runtime_Image_Entries images = {0};
     Assets_Runtime_Font_Entries fonts = {0};
+    Assets_Runtime_Audio_Entries audios = {0};
     Assets_Status status = ASSETS_STATUS_ERROR;
 
     assets_runtime_clear_error(error);
@@ -1020,6 +1088,9 @@ Assets_Status assets_runtime_load_pack(const char *path, Assets_Runtime_Registry
         case ASSETS_RUNTIME_TYPE_FONT:
             if (!assets_runtime_parse_font(payload, payload_size, name, &fonts, error, path)) goto defer;
             break;
+        case ASSETS_RUNTIME_TYPE_AUDIO:
+            if (!assets_runtime_parse_audio(payload, payload_size, name, &audios, error, path)) goto defer;
+            break;
         default:
             assets_runtime_errorf(error, path, 0, "Unknown asset type %u", entry->type);
             goto defer;
@@ -1034,18 +1105,22 @@ Assets_Status assets_runtime_load_pack(const char *path, Assets_Runtime_Registry
     out->image_count = images.count;
     out->fonts = fonts.items;
     out->font_count = fonts.count;
+    out->audios = audios.items;
+    out->audio_count = audios.count;
     status = ASSETS_STATUS_OK;
 
     file.items = NULL;
     models.items = NULL;
     images.items = NULL;
     fonts.items = NULL;
+    audios.items = NULL;
 
 defer:
     free(file.items);
     free(models.items);
     free(images.items);
     free(fonts.items);
+    free(audios.items);
     return status;
 }
 
@@ -1056,6 +1131,7 @@ void assets_runtime_unload(Assets_Runtime_Registry *registry)
     free(registry->models);
     free(registry->images);
     free(registry->fonts);
+    free(registry->audios);
     memset(registry, 0, sizeof(*registry));
 }
 
@@ -1082,6 +1158,15 @@ const Assets_Font *assets_runtime_find_font(const Assets_Runtime_Registry *regis
     if (registry == NULL || name == NULL) return NULL;
     for (size_t i = 0; i < registry->font_count; ++i) {
         if (strcmp(registry->fonts[i].name, name) == 0) return &registry->fonts[i].asset;
+    }
+    return NULL;
+}
+
+const Assets_Runtime_Audio *assets_runtime_find_audio(const Assets_Runtime_Registry *registry, const char *name)
+{
+    if (registry == NULL || name == NULL) return NULL;
+    for (size_t i = 0; i < registry->audio_count; ++i) {
+        if (strcmp(registry->audios[i].name, name) == 0) return &registry->audios[i].asset;
     }
     return NULL;
 }

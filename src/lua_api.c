@@ -16,7 +16,10 @@
 
 typedef struct {
     bool active;
+    bool transient;
+    bool has_decoder;
     ma_sound sound;
+    ma_decoder decoder;
 } Lua_API_Sound;
 
 typedef struct {
@@ -239,14 +242,36 @@ static const Assets_Runtime_Registry *lua_api_require_assets(lua_State *L)
     return g_lua_api.context.assets;
 }
 
+static Olivec_Canvas lua_api_image_canvas(lua_State *L, const Assets_Image *image)
+{
+    if (image->channels != 4) {
+        luaL_error(L, "image '%s' is not RGBA", image->name != NULL ? image->name : "<unnamed>");
+    }
+    if (image->stride % 4 != 0) {
+        luaL_error(L, "image '%s' has an invalid stride", image->name != NULL ? image->name : "<unnamed>");
+    }
+
+    return olivec_canvas((uint32_t *)image->pixels, (size_t)image->width, (size_t)image->height, (size_t)(image->stride / 4));
+}
+
 static const Assets_Model *lua_api_find_model(const char *name)
 {
     return assets_runtime_find_model(g_lua_api.context.assets, name);
 }
 
+static const Assets_Image *lua_api_find_image(const char *name)
+{
+    return assets_runtime_find_image(g_lua_api.context.assets, name);
+}
+
 static const Assets_Font *lua_api_find_font(const char *name)
 {
     return assets_runtime_find_font(g_lua_api.context.assets, name);
+}
+
+static const Assets_Runtime_Audio *lua_api_find_audio(const char *name)
+{
+    return assets_runtime_find_audio(g_lua_api.context.assets, name);
 }
 
 static const Assets_Model *lua_api_check_model(lua_State *L, int index)
@@ -262,6 +287,21 @@ static const Assets_Model *lua_api_check_model(lua_State *L, int index)
     }
 
     return model;
+}
+
+static const Assets_Image *lua_api_check_image(lua_State *L, int index)
+{
+    const char *name = luaL_checkstring(L, index);
+    const Assets_Image *image;
+
+    lua_api_require_assets(L);
+    image = lua_api_find_image(name);
+
+    if (image == NULL) {
+        luaL_error(L, "unknown image '%s'", name);
+    }
+
+    return image;
 }
 
 static const Assets_Font *lua_api_check_font(lua_State *L, int index)
@@ -402,8 +442,39 @@ static Lua_API_Sound *lua_api_get_sound_slot(int handle)
     return &g_lua_api.sounds[index];
 }
 
+static void lua_api_reset_sound_slot(Lua_API_Sound *sound)
+{
+    if (sound == NULL) return;
+    memset(sound, 0, sizeof(*sound));
+}
+
+static void lua_api_release_sound_slot(Lua_API_Sound *sound)
+{
+    if (sound == NULL) return;
+    if (sound->active) {
+        ma_sound_uninit(&sound->sound);
+    }
+    if (sound->has_decoder) {
+        ma_decoder_uninit(&sound->decoder);
+    }
+    lua_api_reset_sound_slot(sound);
+}
+
+static void lua_api_cleanup_finished_sounds(void)
+{
+    for (int i = 0; i < LUA_API_MAX_SOUNDS; ++i) {
+        Lua_API_Sound *sound = &g_lua_api.sounds[i];
+
+        if (!sound->active || !sound->transient) continue;
+        if (ma_sound_at_end(&sound->sound) != MA_TRUE) continue;
+        lua_api_release_sound_slot(sound);
+    }
+}
+
 static int lua_api_alloc_sound_slot(void)
 {
+    lua_api_cleanup_finished_sounds();
+
     for (int i = 0; i < LUA_API_MAX_SOUNDS; ++i) {
         if (!g_lua_api.sounds[i].active) {
             return i;
@@ -416,9 +487,53 @@ static int lua_api_alloc_sound_slot(void)
 static void lua_api_release_all_sounds(void)
 {
     for (int i = 0; i < LUA_API_MAX_SOUNDS; ++i) {
-        if (!g_lua_api.sounds[i].active) continue;
-        ma_sound_uninit(&g_lua_api.sounds[i].sound);
-        g_lua_api.sounds[i].active = false;
+        if (!g_lua_api.sounds[i].active && !g_lua_api.sounds[i].has_decoder) continue;
+        lua_api_release_sound_slot(&g_lua_api.sounds[i]);
+    }
+}
+
+static ma_result lua_api_sound_init_from_audio_asset(Lua_API_Sound *sound, const Assets_Runtime_Audio *audio)
+{
+    ma_result result;
+    ma_decoder_config decoder_config = ma_decoder_config_init_default();
+
+    result = ma_decoder_init_memory(audio->data, audio->data_size, &decoder_config, &sound->decoder);
+    if (result != MA_SUCCESS) {
+        return result;
+    }
+
+    sound->has_decoder = true;
+    result = ma_sound_init_from_data_source(&g_lua_api.audio_engine, &sound->decoder, 0, NULL, &sound->sound);
+    if (result != MA_SUCCESS) {
+        ma_decoder_uninit(&sound->decoder);
+        sound->has_decoder = false;
+        return result;
+    }
+
+    sound->active = true;
+    return MA_SUCCESS;
+}
+
+static ma_result lua_api_sound_init_from_source(Lua_API_Sound *sound, const char *name_or_path)
+{
+    const Assets_Runtime_Audio *audio = NULL;
+
+    lua_api_reset_sound_slot(sound);
+    if (g_lua_api.context.assets != NULL) {
+        audio = lua_api_find_audio(name_or_path);
+    }
+
+    if (audio != NULL) {
+        return lua_api_sound_init_from_audio_asset(sound, audio);
+    }
+
+    {
+        ma_result result = ma_sound_init_from_file(&g_lua_api.audio_engine, name_or_path, 0, NULL, NULL, &sound->sound);
+        if (result != MA_SUCCESS) {
+            return result;
+        }
+        sound->active = true;
+        return MA_SUCCESS;
     }
 }
 
@@ -637,6 +752,36 @@ static int lua_api_graphics_set_pixel(lua_State *L)
     }
 
     return 0;
+}
+
+static int lua_api_graphics_draw_image(lua_State *L)
+{
+    const Assets_Image *image = lua_api_check_image(L, 1);
+    int x = (int)luaL_checkinteger(L, 2);
+    int y = (int)luaL_checkinteger(L, 3);
+    int width = (int)luaL_optinteger(L, 4, image->width);
+    int height = (int)luaL_optinteger(L, 5, image->height);
+    const char *mode = luaL_optstring(L, 6, "blend");
+    Olivec_Canvas sprite = lua_api_image_canvas(L, image);
+
+    if (width <= 0 || height <= 0) {
+        return luaL_error(L, "image draw size must be positive");
+    }
+
+    if (strcmp(mode, "blend") == 0) {
+        olivec_sprite_blend(lua_api_canvas(), x, y, width, height, sprite);
+        return 0;
+    }
+    if (strcmp(mode, "copy") == 0) {
+        olivec_sprite_copy(lua_api_canvas(), x, y, width, height, sprite);
+        return 0;
+    }
+    if (strcmp(mode, "copy_bilinear") == 0) {
+        olivec_sprite_copy_bilinear(lua_api_canvas(), x, y, width, height, sprite);
+        return 0;
+    }
+
+    return luaL_error(L, "unknown image draw mode '%s'", mode);
 }
 
 static int lua_api_core_begin_frame(lua_State *L)
@@ -996,18 +1141,57 @@ static int lua_api_audio_set_master_volume(lua_State *L)
 static int lua_api_audio_play(lua_State *L)
 {
     ma_result result;
-    const char *path;
+    const char *name_or_path;
+    const Assets_Runtime_Audio *audio = NULL;
 
     if (!g_lua_api.audio_ready) {
         return luaL_error(L, "audio engine is not initialized");
     }
 
-    path = luaL_checkstring(L, 1);
-    result = ma_engine_play_sound(&g_lua_api.audio_engine, path, NULL);
-    if (result != MA_SUCCESS) {
-        lua_pushboolean(L, 0);
-        lua_pushstring(L, ma_result_description(result));
-        return 2;
+    name_or_path = luaL_checkstring(L, 1);
+    if (g_lua_api.context.assets != NULL) {
+        audio = lua_api_find_audio(name_or_path);
+    }
+
+    if (audio == NULL) {
+        result = ma_engine_play_sound(&g_lua_api.audio_engine, name_or_path, NULL);
+        if (result != MA_SUCCESS) {
+            lua_pushboolean(L, 0);
+            lua_pushstring(L, ma_result_description(result));
+            return 2;
+        }
+
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    {
+        int slot_index = lua_api_alloc_sound_slot();
+        Lua_API_Sound *sound;
+
+        if (slot_index < 0) {
+            lua_pushboolean(L, 0);
+            lua_pushliteral(L, "no free audio slots");
+            return 2;
+        }
+
+        sound = &g_lua_api.sounds[slot_index];
+        result = lua_api_sound_init_from_source(sound, name_or_path);
+        if (result != MA_SUCCESS) {
+            lua_api_release_sound_slot(sound);
+            lua_pushboolean(L, 0);
+            lua_pushstring(L, ma_result_description(result));
+            return 2;
+        }
+
+        sound->transient = true;
+        result = ma_sound_start(&sound->sound);
+        if (result != MA_SUCCESS) {
+            lua_api_release_sound_slot(sound);
+            lua_pushboolean(L, 0);
+            lua_pushstring(L, ma_result_description(result));
+            return 2;
+        }
     }
 
     lua_pushboolean(L, 1);
@@ -1018,7 +1202,7 @@ static int lua_api_audio_load_sound(lua_State *L)
 {
     ma_result result;
     int slot_index;
-    const char *path;
+    const char *name_or_path;
 
     if (!g_lua_api.audio_ready) {
         return luaL_error(L, "audio engine is not initialized");
@@ -1029,15 +1213,15 @@ static int lua_api_audio_load_sound(lua_State *L)
         return luaL_error(L, "no free audio slots");
     }
 
-    path = luaL_checkstring(L, 1);
-    result = ma_sound_init_from_file(&g_lua_api.audio_engine, path, 0, NULL, NULL, &g_lua_api.sounds[slot_index].sound);
+    name_or_path = luaL_checkstring(L, 1);
+    result = lua_api_sound_init_from_source(&g_lua_api.sounds[slot_index], name_or_path);
     if (result != MA_SUCCESS) {
+        lua_api_release_sound_slot(&g_lua_api.sounds[slot_index]);
         lua_pushnil(L);
         lua_pushstring(L, ma_result_description(result));
         return 2;
     }
 
-    g_lua_api.sounds[slot_index].active = true;
     lua_pushinteger(L, slot_index + 1);
     return 1;
 }
@@ -1050,8 +1234,7 @@ static int lua_api_audio_unload_sound(lua_State *L)
         return luaL_error(L, "invalid sound handle");
     }
 
-    ma_sound_uninit(&sound->sound);
-    sound->active = false;
+    lua_api_release_sound_slot(sound);
     return 0;
 }
 
@@ -1236,6 +1419,7 @@ static const Lua_API_Function_Def lua_api_graphics_functions[] = {
     {"line", lua_api_graphics_line, "---@param x1 integer\n---@param y1 integer\n---@param x2 integer\n---@param y2 integer\n---@param color integer\nfunction graphics.line(x1, y1, x2, y2, color) end\n"},
     {"triangle", lua_api_graphics_triangle, "---@param x1 integer\n---@param y1 integer\n---@param x2 integer\n---@param y2 integer\n---@param x3 integer\n---@param y3 integer\n---@param color integer\nfunction graphics.triangle(x1, y1, x2, y2, x3, y3, color) end\n"},
     {"set_pixel", lua_api_graphics_set_pixel, "---@param x integer\n---@param y integer\n---@param color integer\nfunction graphics.set_pixel(x, y, color) end\n"},
+    {"draw_image", lua_api_graphics_draw_image, "---@param image string\n---@param x integer\n---@param y integer\n---@param width? integer\n---@param height? integer\n---@param mode? 'blend'|'copy'|'copy_bilinear'\nfunction graphics.draw_image(image, x, y, width, height, mode) end\n"},
 };
 
 static const Lua_API_Function_Def lua_api_core_functions[] = {
@@ -1276,8 +1460,8 @@ static const Lua_API_Function_Def lua_api_audio_functions[] = {
     {"shutdown", lua_api_audio_shutdown, "function audio.shutdown() end\n"},
     {"is_ready", lua_api_audio_is_ready, "---@return boolean\nfunction audio.is_ready() end\n"},
     {"set_master_volume", lua_api_audio_set_master_volume, "---@param volume number\nfunction audio.set_master_volume(volume) end\n"},
-    {"play", lua_api_audio_play, "---@param path string\n---@return boolean ok, string? err\nfunction audio.play(path) end\n"},
-    {"load_sound", lua_api_audio_load_sound, "---@param path string\n---@return integer? handle, string? err\nfunction audio.load_sound(path) end\n"},
+    {"play", lua_api_audio_play, "---@param name_or_path string\n---@return boolean ok, string? err\nfunction audio.play(name_or_path) end\n"},
+    {"load_sound", lua_api_audio_load_sound, "---@param name_or_path string\n---@return integer? handle, string? err\nfunction audio.load_sound(name_or_path) end\n"},
     {"unload_sound", lua_api_audio_unload_sound, "---@param handle integer\nfunction audio.unload_sound(handle) end\n"},
     {"start", lua_api_audio_start_sound, "---@param handle integer\n---@return boolean ok, string? err\nfunction audio.start(handle) end\n"},
     {"stop", lua_api_audio_stop_sound, "---@param handle integer\n---@return boolean ok, string? err\nfunction audio.stop(handle) end\n"},
@@ -1562,6 +1746,26 @@ bool lua_api_run_string(const char *chunk)
     return lua_api_report_call_status(luaL_dostring(g_lua_api.state, chunk));
 }
 
+bool lua_api_set_package_path(const char *path)
+{
+    if (g_lua_api.state == NULL) {
+        fputs("lua_api_set_package_path: Lua state is not initialized\n", stderr);
+        return false;
+    }
+
+    lua_getglobal(g_lua_api.state, "package");
+    if (!lua_istable(g_lua_api.state, -1)) {
+        lua_pop(g_lua_api.state, 1);
+        fputs("lua_api_set_package_path: package table is unavailable\n", stderr);
+        return false;
+    }
+
+    lua_pushstring(g_lua_api.state, path != NULL ? path : "");
+    lua_setfield(g_lua_api.state, -2, "path");
+    lua_pop(g_lua_api.state, 1);
+    return true;
+}
+
 bool lua_api_call_global0(const char *name)
 {
     int status;
@@ -1583,6 +1787,7 @@ bool lua_api_call_global0(const char *name)
         return false;
     }
 
+    lua_api_cleanup_finished_sounds();
     status = lua_pcall(g_lua_api.state, 0, 0, 0);
     return lua_api_report_call_status(status);
 }
@@ -1609,6 +1814,7 @@ bool lua_api_call_global1_number(const char *name, double value)
     }
 
     lua_pushnumber(g_lua_api.state, value);
+    lua_api_cleanup_finished_sounds();
     status = lua_pcall(g_lua_api.state, 1, 0, 0);
     return lua_api_report_call_status(status);
 }

@@ -49,6 +49,15 @@ static const char *lua_sources[] = {
     "third_party/lua-5.5.0/src/lzio.c",
 };
 
+static const char *host_executable_path(const char *stem)
+{
+#ifdef _WIN32
+    return temp_sprintf("%s.exe", stem);
+#else
+    return stem;
+#endif
+}
+
 static void begin_cc(Cmd *cmd)
 {
     cmd->count = 0;
@@ -73,6 +82,84 @@ static void append_platform_libraries(Cmd *cmd)
 #endif
 }
 
+static void append_common_engine_sources(Cmd *cmd)
+{
+    nob_cc_inputs(cmd, "src/core.c", "src/lua_api.c", "src/assets_runtime.c", "src/project_runtime.c");
+    for (size_t i = 0; i < NOB_ARRAY_LEN(lua_sources); ++i) {
+        cmd_append(cmd, lua_sources[i]);
+    }
+}
+
+static bool emit_binary_blob_header(
+    const char *binary_path,
+    const char *header_path,
+    const char *symbol_name,
+    const char *size_name
+)
+{
+    Nob_String_Builder binary = {0};
+    Nob_String_Builder rendered = {0};
+    bool result = true;
+
+    if (!nob_read_entire_file(binary_path, &binary)) {
+        nob_log(ERROR, "failed to read runner binary %s", binary_path);
+        nob_return_defer(false);
+    }
+
+    nob_sb_append_cstr(&rendered,
+        "#ifndef EXPORT_RUNNER_BLOB_H_\n"
+        "#define EXPORT_RUNNER_BLOB_H_\n"
+        "\n"
+        "#include <stddef.h>\n"
+        "\n");
+    nob_sb_appendf(&rendered, "static const unsigned char %s[%zu] = {\n", symbol_name, binary.count > 0 ? binary.count : 1);
+
+    if (binary.count == 0) {
+        nob_sb_append_cstr(&rendered, "    0x00\n");
+    } else {
+        for (size_t i = 0; i < binary.count; ++i) {
+            if (i % 12 == 0) nob_sb_append_cstr(&rendered, "    ");
+            nob_sb_appendf(&rendered, "0x%02X", (unsigned char)binary.items[i]);
+            if (i + 1 < binary.count) nob_sb_append_cstr(&rendered, ", ");
+            if (i % 12 == 11 || i + 1 == binary.count) nob_sb_append_cstr(&rendered, "\n");
+        }
+    }
+
+    nob_sb_appendf(&rendered, "};\nstatic const size_t %s = %zu;\n\n#endif\n", size_name, binary.count);
+    nob_sb_append_null(&rendered);
+
+    if (!mkdir_if_not_exists(temp_dir_name(header_path))) {
+        nob_return_defer(false);
+    }
+    if (!nob_write_entire_file(header_path, rendered.items, rendered.count - 1)) {
+        nob_log(ERROR, "failed to write generated header %s", header_path);
+        nob_return_defer(false);
+    }
+
+defer:
+    free(binary.items);
+    free(rendered.items);
+    return result;
+}
+
+static bool build_export_runner(bool release, const char *output_path)
+{
+    begin_cc(&cmd);
+    cmd_append(&cmd, "-Wno-missing-braces");
+
+    if (release) {
+        cmd_append(&cmd, "-O3", "-DNDEBUG", "-ffast-math", "-flto", "-fno-strict-aliasing");
+    } else {
+        cmd_append(&cmd, "-O1", "-ggdb");
+    }
+
+    nob_cc_output(&cmd, output_path);
+    nob_cc_inputs(&cmd, "src/export_runner_main.c");
+    append_common_engine_sources(&cmd);
+    append_platform_libraries(&cmd);
+    return cmd_run(&cmd);
+}
+
 static bool build_main(bool release)
 {
     begin_cc(&cmd);
@@ -85,10 +172,8 @@ static bool build_main(bool release)
     }
 
     nob_cc_output(&cmd, "limerence");
-    nob_cc_inputs(&cmd, "src/main.c", "src/core.c", "src/lua_api.c", "src/assets_runtime.c");
-    for (size_t i = 0; i < NOB_ARRAY_LEN(lua_sources); ++i) {
-        cmd_append(&cmd, lua_sources[i]);
-    }
+    nob_cc_inputs(&cmd, "src/main.c");
+    append_common_engine_sources(&cmd);
     append_platform_libraries(&cmd);
     return cmd_run(&cmd);
 }
@@ -98,12 +183,18 @@ int main(int argc, char **argv)
     NOB_GO_REBUILD_URSELF_PLUS(
         argc,
         argv,
+        "nob.c",
         "src/main.c",
+        "src/export_runner_main.c",
+        "src/project_runtime.c",
+        "src/project_runtime.h",
         "src/assets.h",
         "src/assets_runtime.c",
         "src/assets_runtime.h",
         "src/lua_api.c",
         "src/lua_api.h",
+        "src/core.c",
+        "src/core.h",
         "third_party/nob.h",
         "third_party/stb_image.h",
         "third_party/stb_truetype.h",
@@ -116,6 +207,8 @@ int main(int argc, char **argv)
     );
 
     bool release = false;
+    const char *runner_output = host_executable_path("generated/export_runner");
+    const char *blob_header_path = "generated/export_runner_blob.h";
 
     flag_bool_var(&release, "-release", false, "Build with release optimizations.");
     if (!flag_parse(argc, argv)) {
@@ -131,6 +224,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (!mkdir_if_not_exists("generated")) return 1;
+    if (!build_export_runner(release, runner_output)) return 1;
+    if (!emit_binary_blob_header(
+            runner_output,
+            blob_header_path,
+            "g_export_runner_blob",
+            "g_export_runner_blob_size"
+        )) {
+        return 1;
+    }
     if (!build_main(release)) return 1;
 
     return 0;

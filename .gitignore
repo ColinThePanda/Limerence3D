@@ -1,5 +1,6 @@
 *.old
-assets/generated/
+examples/*/generated
+generated
 
 # Prerequisites
 *.d
