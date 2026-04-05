@@ -226,11 +226,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-assets
+          merge-multiple: true
 
       - name: Upload assets to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          shopt -s globstar nullglob
-          gh release upload "$TAG_NAME" release-assets/** --clobber
+          find release-assets -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$TAG_NAME" --clobber
